@@ -141,6 +141,12 @@ function IndexSidepanel() {
     }
   }
 
+  const handleEject = () => {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL("newtab.html")
+    })
+  }
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -160,6 +166,45 @@ function IndexSidepanel() {
         background: "white",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       }}>
+      
+      {/* Header with eject button */}
+      <div style={{
+        position: "relative",
+        padding: "12px 16px",
+        borderBottom: "1px solid #e0e0e0"
+      }}>
+        <button
+          onClick={handleEject}
+          style={{
+            position: "absolute",
+            top: "12px",
+            right: "16px",
+            background: "none",
+            border: "none",
+            padding: "6px",
+            cursor: "pointer",
+            borderRadius: "4px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#666",
+            transition: "all 0.2s ease"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#f0f0f0"
+            e.currentTarget.style.color = "#333"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "none"
+            e.currentTarget.style.color = "#666"
+          }}
+          title="Open in fullscreen">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13zm1 2h11v8h-11V4z"/>
+            <path d="M11 6.5l1.5-1.5v3l-1.5-1.5zm-6 3L3.5 11V8L5 9.5z"/>
+          </svg>
+        </button>
+      </div>
       
       {/* Chat Area */}
       <div style={{ 
@@ -262,7 +307,7 @@ function IndexSidepanel() {
                     maxWidth: "80%",
                     padding: "12px 16px",
                     borderRadius: "16px",
-                    background: message.isUser ? "#007AFF" : "white",
+                    background: message.isUser ? "#8b5cf6" : "white",
                     color: message.isUser ? "white" : "#333",
                     fontSize: "14px",
                     lineHeight: "1.4",
