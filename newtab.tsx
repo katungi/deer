@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react"
+import { CiSearch } from "react-icons/ci"
+import { FaRegMessage } from "react-icons/fa6"
 
 interface Message {
   id: string
@@ -252,7 +254,7 @@ function NewTabPage() {
             background: "white",
             borderRadius: "24px",
             border: "1px solid #e1e5e9",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
             overflow: "hidden"
           }}>
             
@@ -261,8 +263,7 @@ function NewTabPage() {
               display: "flex",
               flexDirection: "column",
               gap: "8px",
-              padding: "16px 20px",
-              borderBottom: isListening || suggestedPrompts.length > 0 ? "1px solid #f1f5f9" : "none"
+              padding: "16px 20px"
             }}>
               {/* Selected Tabs */}
               {selectedTabs.length > 0 && (
@@ -363,6 +364,7 @@ function NewTabPage() {
                 alignItems: "center",
                 gap: 12
               }}>
+                <CiSearch size={20} style={{ color: "#9ca3af", flexShrink: 0 }} />
                 <textarea
                   ref={inputRef}
                   value={inputText}
@@ -391,7 +393,7 @@ function NewTabPage() {
               <div style={{
                 padding: "24px 20px",
                 textAlign: "center",
-                borderBottom: "1px solid #f1f5f9"
+                borderTop: "1px solid #f1f5f9"
               }}>
                 <div style={{
                   fontSize: "14px",
@@ -479,7 +481,8 @@ function NewTabPage() {
             {/* Suggested prompts */}
             {!isListening && (
               <div style={{
-                padding: "20px"
+                padding: "20px",
+                borderTop: "1px solid #f1f5f9"
               }}>
                 <div style={{
                   display: "flex",
@@ -510,10 +513,7 @@ function NewTabPage() {
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = "transparent"
                       }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
-                        <path d="M8 12h8"/>
-                        <path d="M12 8v8"/>
-                      </svg>
+                      <FaRegMessage size={14} style={{ color: "#9ca3af" }} />
                       {prompt}
                     </button>
                   ))}
@@ -534,16 +534,7 @@ function NewTabPage() {
                     alignItems: "center",
                     justifyContent: "space-between",
                     gap: 8,
-                    transition: "all 0.2s ease",
                     marginTop: "16px"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f5f5f5"
-                    e.currentTarget.style.color = "#374151"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                    e.currentTarget.style.color = "#6b7280"
                   }}>
                   <div style={{
                     display: "flex",
