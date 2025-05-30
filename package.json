@@ -29,6 +29,15 @@
     ],
     "permissions": [
       "tabs"
-    ]
+    ],
+    "web_accessible_resources": [
+      {
+        "resources": ["assets/deer.png"],
+        "matches": ["<all_urls>"]
+      }
+    ],
+    "side_panel": {
+      "default_path": "sidepanel.html"
+    }
   }
 }

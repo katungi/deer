@@ -184,15 +184,14 @@ function IndexSidepanel() {
               width: "80px",
               height: "80px",
               borderRadius: "50%",
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: "32px",
-              overflow: "hidden"
+              overflow: "hidden",
             }}>
               <img 
-                src="./assets/deer.png"
+                src={chrome.runtime.getURL("assets/deer.png")}
                 alt="Deer"
                 style={{
                   width: "60px",
