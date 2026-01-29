@@ -122,26 +122,37 @@ function NewTabPage() {
     handleSendMessage()
   }
 
+  const [tabFilterQuery, setTabFilterQuery] = useState("")
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
     setInputText(value)
-    
+
     // Auto-resize textarea
     if (inputRef.current) {
       inputRef.current.style.height = '20px'
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px'
     }
 
-    // Check for @ symbol - exactly like sidepanel
+    // Check for @ symbol and extract filter query
     const cursorPosition = e.target.selectionStart
     const textBeforeCursor = value.substring(0, cursorPosition)
     const lastAtIndex = textBeforeCursor.lastIndexOf('@')
-    
-    if (lastAtIndex !== -1 && lastAtIndex === cursorPosition - 1) {
-      setShowTabDropdown(true)
-      setDropdownPosition(lastAtIndex)
+
+    if (lastAtIndex !== -1) {
+      // Check if there's a space between @ and cursor (which would close the dropdown)
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1)
+      if (!textAfterAt.includes(' ')) {
+        setShowTabDropdown(true)
+        setDropdownPosition(lastAtIndex)
+        setTabFilterQuery(textAfterAt.toLowerCase())
+      } else {
+        setShowTabDropdown(false)
+        setTabFilterQuery("")
+      }
     } else {
       setShowTabDropdown(false)
+      setTabFilterQuery("")
     }
   }
 
@@ -150,11 +161,14 @@ function NewTabPage() {
       setSelectedTabs(prev => [...prev, tab])
     }
     setShowTabDropdown(false)
-    
-    // Replace @ with tab reference in input - exactly like sidepanel
+    setTabFilterQuery("")
+
+    // Replace @ and filter query with tab reference in input
     const beforeAt = inputText.substring(0, dropdownPosition)
-    const afterAt = inputText.substring(dropdownPosition + 1)
-    setInputText(beforeAt + `@${tab.title} ` + afterAt)
+    // Find where the filter query ends (at space or end of string)
+    const afterAtStart = dropdownPosition + 1 + tabFilterQuery.length
+    const afterAt = inputText.substring(afterAtStart)
+    setInputText(beforeAt + afterAt)
   }
 
   const removeSelectedTab = (tabId: number) => {
@@ -254,8 +268,7 @@ function NewTabPage() {
             background: "white",
             borderRadius: "24px",
             border: "1px solid #e1e5e9",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            overflow: "hidden"
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
           }}>
             
             {/* Input area */}
@@ -393,7 +406,8 @@ function NewTabPage() {
               <div style={{
                 padding: "24px 20px",
                 textAlign: "center",
-                borderTop: "1px solid #f1f5f9"
+                borderTop: "1px solid #f1f5f9",
+                borderRadius: "0 0 24px 24px"
               }}>
                 <div style={{
                   fontSize: "14px",
@@ -482,7 +496,8 @@ function NewTabPage() {
             {!isListening && (
               <div style={{
                 padding: "20px",
-                borderTop: "1px solid #f1f5f9"
+                borderTop: "1px solid #f1f5f9",
+                borderRadius: "0 0 24px 24px"
               }}>
                 <div style={{
                   display: "flex",
@@ -513,14 +528,20 @@ function NewTabPage() {
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = "transparent"
                       }}>
-                      <FaRegMessage size={14} style={{ color: "#9ca3af" }} />
-                      {prompt}
+                      <FaRegMessage size={14} style={{ color: "#9ca3af", flexShrink: 0, marginTop: "1px" }} />
+                      <span style={{ flex: 1 }}>{prompt}</span>
                     </button>
                   ))}
                 </div>
                 
                 {/* Add tabs or files */}
                 <button
+                  onClick={() => {
+                    setInputText("@")
+                    setShowTabDropdown(true)
+                    setDropdownPosition(0)
+                    inputRef.current?.focus()
+                  }}
                   style={{
                     width: "100%",
                     padding: "12px 16px",
@@ -533,21 +554,37 @@ function NewTabPage() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    gap: 8,
                     marginTop: "16px"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#f5f5f5"
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent"
                   }}>
                   <div style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8
                   }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
                       <path d="M12 5v14"/>
                       <path d="M5 12h14"/>
                     </svg>
-                    Add tabs or files
+                    <span>Add tabs or files</span>
                   </div>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ flexShrink: 0 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startListening()
+                    }}>
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                     <line x1="12" y1="19" x2="12" y2="23"/>
@@ -582,7 +619,15 @@ function NewTabPage() {
                 }}>
                   Select a tab
                 </div>
-                {allTabs.slice(0, 8).map((tab) => (
+                {allTabs
+                  .filter(tab => {
+                    if (!tabFilterQuery) return true
+                    const title = (tab.title || '').toLowerCase()
+                    const url = (tab.url || '').toLowerCase()
+                    return title.includes(tabFilterQuery) || url.includes(tabFilterQuery)
+                  })
+                  .slice(0, 8)
+                  .map((tab) => (
                   <div
                     key={tab.id}
                     onClick={() => handleTabSelect(tab)}
@@ -877,7 +922,15 @@ function NewTabPage() {
                 }}>
                   Select a tab
                 </div>
-                {allTabs.slice(0, 8).map((tab) => (
+                {allTabs
+                  .filter(tab => {
+                    if (!tabFilterQuery) return true
+                    const title = (tab.title || '').toLowerCase()
+                    const url = (tab.url || '').toLowerCase()
+                    return title.includes(tabFilterQuery) || url.includes(tabFilterQuery)
+                  })
+                  .slice(0, 8)
+                  .map((tab) => (
                   <div
                     key={tab.id}
                     onClick={() => handleTabSelect(tab)}
