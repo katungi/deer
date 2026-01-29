@@ -1,8 +1,19 @@
 import { useState, useEffect, useRef } from "react"
 import type { PlasmoCSConfig } from "plasmo"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
+import { X, Send } from "lucide-react"
+import cssText from "data-text:./style.css"
 
 export const config: PlasmoCSConfig = {
   matches: ["<all_urls>"]
+}
+
+export const getStyle = () => {
+  const style = document.createElement("style")
+  style.textContent = cssText
+  return style
 }
 
 interface Message {
@@ -73,11 +84,11 @@ function FloatingChat() {
     }
 
     setMessages(prev => [...prev, newMessage])
-    
+
     setTimeout(() => {
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: selectedTabs.length > 0 
+        text: selectedTabs.length > 0
           ? `I can help you with the ${selectedTabs.length} selected tab(s). Here's my analysis...`
           : "I'm here to help! What would you like to know about this page?",
         isUser: false,
@@ -111,7 +122,6 @@ function FloatingChat() {
   const handleTabSelect = (tab: Tab) => {
     if (!selectedTabs.find(t => t.id === tab.id)) {
       setSelectedTabs(prev => [...prev, tab])
-      // Remove the @ from input - the styled chip shows the selected tab
       setInputText(prev => prev.replace('@', ''))
     }
     setShowTabDropdown(false)
@@ -128,7 +138,6 @@ function FloatingChat() {
     }
   }
 
-  // Auto-resize textarea when inputText changes programmatically
   useEffect(() => {
     autoResizeTextarea()
   }, [inputText])
@@ -141,7 +150,7 @@ function FloatingChat() {
     const cursorPosition = e.target.selectionStart
     const textBeforeCursor = value.substring(0, cursorPosition)
     const lastAtIndex = textBeforeCursor.lastIndexOf('@')
-    
+
     if (lastAtIndex !== -1 && lastAtIndex === cursorPosition - 1) {
       setShowTabDropdown(true)
     } else {
@@ -154,321 +163,130 @@ function FloatingChat() {
   }
 
   if (!isExpanded) {
-    // Collapsed floating bubble
     return (
       <div
         onClick={toggleExpanded}
-        style={{
-          position: "fixed",
-          bottom: "24px",
-          left: "24px",
-          width: "56px",
-          height: "56px",
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-          cursor: "pointer",
-          zIndex: 999999,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          transition: "all 0.3s ease",
-          border: "3px solid white"
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "scale(1.05)"
-          e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.2)"
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "scale(1)"
-          e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.15)"
-        }}>
-        <img 
+        className="fixed bottom-6 left-6 w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg cursor-pointer z-[999999] flex items-center justify-center transition-all duration-300 border-[3px] border-white hover:scale-105 hover:shadow-xl"
+      >
+        <img
           src={chrome.runtime.getURL("assets/deer.png")}
           alt="Deer Assistant"
-          style={{
-            width: "32px",
-            height: "32px",
-            objectFit: "cover",
-            borderRadius: "50%"
-          }}
+          className="w-8 h-8 object-cover rounded-full"
         />
       </div>
     )
   }
 
-  // Expanded chat interface
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "24px",
-        left: "24px",
-        width: "360px",
-        height: "500px",
-        background: "white",
-        borderRadius: "16px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-        zIndex: 999999,
-        display: "flex",
-        flexDirection: "column",
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        border: "1px solid #e0e0e0",
-        overflow: "hidden"
-      }}>
-
+    <div className="fixed bottom-6 left-6 w-[360px] h-[500px] bg-white rounded-2xl shadow-2xl z-[999999] flex flex-col font-sans border border-gray-200 overflow-hidden">
       {/* Header */}
-      <div style={{
-        padding: "16px 20px",
-        background: "white",
-        borderBottom: "1px solid #f0f0f0",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            overflow: "hidden"
-          }}>
-            <img 
+      <div className="px-5 py-4 bg-white border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden">
+            <img
               src={chrome.runtime.getURL("assets/deer.png")}
               alt="Deer"
-              style={{
-                width: "20px",
-                height: "20px",
-                objectFit: "cover"
-              }}
+              className="w-5 h-5 object-cover"
             />
           </div>
-          <span style={{ 
-            fontWeight: "600", 
-            color: "#333",
-            fontSize: "14px"
-          }}>
+          <span className="font-semibold text-gray-800 text-sm">
             Deer Assistant
           </span>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={toggleExpanded}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: "4px",
-            borderRadius: "4px",
-            color: "#666"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#f0f0f0"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "none"
-          }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 6L6 18"/>
-            <path d="M6 6l12 12"/>
-          </svg>
-        </button>
+          className="h-7 w-7 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Content Area */}
-      <div style={{ 
-        flex: 1, 
-        display: "flex", 
-        flexDirection: "column",
-        position: "relative",
-        overflow: "hidden"
-      }}>
-
+      <div className="flex-1 flex flex-col relative overflow-hidden">
         {messages.length === 0 ? (
           /* Welcome State */
-          <div style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-            textAlign: "center"
-          }}>
-            <div style={{
-              width: "60px",
-              height: "60px",
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: "16px",
-              overflow: "hidden"
-            }}>
-              <img 
+          <div className="flex-1 flex flex-col items-center justify-center p-5 text-center">
+            <div className="w-15 h-15 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4 overflow-hidden">
+              <img
                 src={chrome.runtime.getURL("assets/deer.png")}
                 alt="Deer"
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  objectFit: "cover"
-                }}
+                className="w-10 h-10 object-cover"
               />
             </div>
-            
-            <h3 style={{ 
-              marginBottom: "8px", 
-              color: "#333",
-              fontSize: "16px",
-              fontWeight: "600"
-            }}>
+
+            <h3 className="mb-2 text-gray-800 text-base font-semibold">
               How can I help?
             </h3>
-            
-            <p style={{ 
-              marginBottom: "20px", 
-              color: "#666",
-              fontSize: "13px",
-              lineHeight: "1.4"
-            }}>
+
+            <p className="mb-5 text-gray-500 text-sm leading-relaxed">
               Ask me anything about this page or use @ to reference tabs.
             </p>
 
-            <div style={{ width: "100%" }}>
+            <div className="w-full space-y-2">
               {suggestedPrompts.map((prompt, index) => (
-                <button
+                <Button
                   key={index}
+                  variant="outline"
                   onClick={() => handlePromptClick(prompt)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    marginBottom: "8px",
-                    background: "white",
-                    border: "1px solid #e0e0e0",
-                    borderRadius: "8px",
-                    fontSize: "13px",
-                    color: "#333",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "all 0.2s ease",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    fontWeight: "400"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f0f0f0"
-                    e.currentTarget.style.borderColor = "#d0d0d0"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "white"
-                    e.currentTarget.style.borderColor = "#e0e0e0"
-                  }}>
-                  <div style={{ fontSize: "14px" }}>
+                  className="w-full justify-start gap-2.5 text-sm text-gray-700 font-normal py-2.5 px-3.5 hover:bg-gray-50"
+                >
+                  <span className="text-sm">
                     {index === 0 ? "📄" : index === 1 ? "💭" : "🤔"}
-                  </div>
+                  </span>
                   {prompt}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
         ) : (
           /* Messages */
-          <div style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "16px"
-          }}>
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                style={{
-                  display: "flex",
-                  marginBottom: "12px",
-                  justifyContent: message.isUser ? "flex-end" : "flex-start"
-                }}>
+          <ScrollArea className="flex-1 p-4">
+            <div className="space-y-3">
+              {messages.map((message) => (
                 <div
-                  style={{
-                    maxWidth: "80%",
-                    padding: "10px 14px",
-                    borderRadius: "16px",
-                    background: message.isUser ? "#8b5cf6" : "#f1f3f4",
-                    color: message.isUser ? "white" : "#333",
-                    fontSize: "13px",
-                    lineHeight: "1.4"
-                  }}>
-                  {message.text}
+                  key={message.id}
+                  className={cn(
+                    "flex",
+                    message.isUser ? "justify-end" : "justify-start"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
+                      message.isUser
+                        ? "bg-violet-500 text-white"
+                        : "bg-gray-100 text-gray-800"
+                    )}
+                  >
+                    {message.text}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </ScrollArea>
         )}
 
         {/* Tab Dropdown */}
         {showTabDropdown && (
-          <div style={{
-            position: "absolute",
-            bottom: "70px",
-            left: "16px",
-            right: "16px",
-            background: "white",
-            border: "1px solid #e0e0e0",
-            borderRadius: "8px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            maxHeight: "150px",
-            overflowY: "auto",
-            zIndex: 1000
-          }}>
-            <div style={{
-              padding: "8px 12px",
-              fontSize: "12px",
-              color: "#666",
-              fontWeight: "500",
-              borderBottom: "1px solid #f0f0f0"
-            }}>
+          <div className="absolute bottom-[70px] left-4 right-4 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[150px] overflow-y-auto z-50">
+            <div className="px-3 py-2 text-xs text-gray-500 font-medium border-b border-gray-100">
               Select a tab
             </div>
             {allTabs.slice(0, 5).map((tab) => (
               <div
                 key={tab.id}
                 onClick={() => handleTabSelect(tab)}
-                style={{
-                  padding: "8px 12px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  borderBottom: "1px solid #f8f9fa",
-                  transition: "background 0.1s ease"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#f8f9fa"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "white"
-                }}>
+                className="px-3 py-2 cursor-pointer flex items-center gap-2 border-b border-gray-50 hover:bg-gray-50 transition-colors"
+              >
                 <img
                   src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
                   alt=""
-                  style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: 2,
-                    flexShrink: 0
-                  }}
+                  className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
                 />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: "12px",
-                    color: "#333",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis"
-                  }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-700 truncate">
                     {tab.title}
                   </div>
                 </div>
@@ -479,81 +297,28 @@ function FloatingChat() {
       </div>
 
       {/* Input Area */}
-      <div style={{
-        padding: "12px 16px",
-        background: "white",
-        borderTop: "1px solid #f0f0f0"
-      }}>
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-          background: "#f8f9fa",
-          borderRadius: "20px",
-          padding: "10px 14px",
-          border: "1px solid #e0e0e0",
-          minHeight: "40px"
-        }}>
+      <div className="p-3 bg-white border-t border-gray-100">
+        <div className="flex flex-col gap-2 bg-gray-50 rounded-2xl px-3.5 py-2.5 border border-gray-200 min-h-[40px]">
           {/* Selected Tabs */}
           {selectedTabs.length > 0 && (
-            <div style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "4px",
-              marginBottom: "6px"
-            }}>
+            <div className="flex flex-wrap gap-1 mb-1.5">
               {selectedTabs.map((tab) => (
                 <div
                   key={tab.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "#e0f2fe",
-                    border: "1px solid #7dd3fc",
-                    borderRadius: "10px",
-                    padding: "4px 8px",
-                    fontSize: "11px",
-                    maxWidth: "140px"
-                  }}>
+                  className="flex items-center gap-1.5 bg-sky-100 border border-sky-300 rounded-xl px-2 py-1 text-[11px] max-w-[140px]"
+                >
                   <img
                     src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
                     alt=""
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 2,
-                      flexShrink: 0
-                    }}
+                    className="w-3 h-3 rounded-sm flex-shrink-0"
                   />
-                  <span style={{
-                    color: "#0c4a6e",
-                    fontWeight: "500",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    flex: 1
-                  }}>
+                  <span className="text-sky-900 font-medium truncate flex-1">
                     {tab.title}
                   </span>
                   <button
                     onClick={() => removeSelectedTab(tab.id!)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: "0",
-                      color: "#0369a1",
-                      fontSize: "12px",
-                      lineHeight: 1,
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "#075985"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "#0369a1"
-                    }}>
+                    className="bg-transparent border-none cursor-pointer p-0 text-sky-700 text-xs leading-none flex-shrink-0 hover:text-sky-900"
+                  >
                     ×
                   </button>
                 </div>
@@ -562,49 +327,31 @@ function FloatingChat() {
           )}
 
           {/* Input */}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
+          <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
               value={inputText}
               onChange={handleInputChange}
               onKeyDown={handleKeyPress}
               placeholder="Ask anything..."
-              style={{
-                flex: 1,
-                border: "none",
-                outline: "none",
-                resize: "none",
-                fontSize: "13px",
-                lineHeight: "1.5",
-                background: "transparent",
-                color: "#333",
-                fontFamily: "inherit",
-                minHeight: "20px",
-                maxHeight: "100px",
-                overflow: "hidden"
-              }}
+              className="flex-1 border-none outline-none resize-none text-sm leading-relaxed bg-transparent text-gray-800 font-sans min-h-[20px] max-h-[100px] overflow-hidden"
             />
-            <button
+            <Button
               onClick={handleSendMessage}
               disabled={!inputText.trim()}
-              style={{
-                background: inputText.trim() ? "#8b5cf6" : "#e0e0e0",
-                border: "none",
-                borderRadius: "50%",
-                width: "32px",
-                height: "32px",
-                cursor: inputText.trim() ? "pointer" : "not-allowed",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                transition: "all 0.2s ease"
-              }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={inputText.trim() ? "white" : "#999"} strokeWidth="2">
-                <path d="M22 2L11 13"/>
-                <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
-              </svg>
-            </button>
+              size="icon"
+              className={cn(
+                "h-8 w-8 rounded-full flex-shrink-0 transition-all",
+                inputText.trim()
+                  ? "bg-violet-500 hover:bg-violet-600"
+                  : "bg-gray-200"
+              )}
+            >
+              <Send className={cn(
+                "h-3.5 w-3.5",
+                inputText.trim() ? "text-white" : "text-gray-400"
+              )} />
+            </Button>
           </div>
         </div>
       </div>
@@ -612,4 +359,4 @@ function FloatingChat() {
   )
 }
 
-export default FloatingChat 
+export default FloatingChat

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react"
-import { CiSearch } from "react-icons/ci"
-import { FaRegMessage } from "react-icons/fa6"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
+import { Search, MessageSquare, Plus, Mic, Send, X, Check } from "lucide-react"
+import "./style.css"
 
 interface Message {
   id: string
@@ -98,11 +101,11 @@ function NewTabPage() {
     }
 
     setMessages(prev => [...prev, newMessage])
-    
+
     setTimeout(() => {
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: selectedTabs.length > 0 
+        text: selectedTabs.length > 0
           ? `I can help you with the ${selectedTabs.length} selected tab(s). Here's my analysis...`
           : "Of course! What topic or subject would you like to be quizzed on? It could be anything—history, science, pop culture, geography, sports, or something else. Let me know your preference, and I'll create a quiz for you!",
         isUser: false,
@@ -133,19 +136,16 @@ function NewTabPage() {
     const value = e.target.value
     setInputText(value)
 
-    // Auto-resize textarea
     if (inputRef.current) {
       inputRef.current.style.height = '20px'
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px'
     }
 
-    // Check for @ symbol and extract filter query
     const cursorPosition = e.target.selectionStart
     const textBeforeCursor = value.substring(0, cursorPosition)
     const lastAtIndex = textBeforeCursor.lastIndexOf('@')
 
     if (lastAtIndex !== -1) {
-      // Check if there's a space between @ and cursor (which would close the dropdown)
       const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1)
       if (!textAfterAt.includes(' ')) {
         setShowTabDropdown(true)
@@ -168,9 +168,7 @@ function NewTabPage() {
     setShowTabDropdown(false)
     setTabFilterQuery("")
 
-    // Replace @ and filter query with tab reference in input
     const beforeAt = inputText.substring(0, dropdownPosition)
-    // Find where the filter query ends (at space or end of string)
     const afterAtStart = dropdownPosition + 1 + tabFilterQuery.length
     const afterAt = inputText.substring(afterAtStart)
     setInputText(beforeAt + afterAt)
@@ -179,8 +177,7 @@ function NewTabPage() {
   const removeSelectedTab = (tabId: number) => {
     const tabToRemove = selectedTabs.find(tab => tab.id === tabId)
     setSelectedTabs(prev => prev.filter(tab => tab.id !== tabId))
-    
-    // Also remove tab references from input text - exactly like sidepanel
+
     if (tabToRemove && tabToRemove.title) {
       setInputText(prev => prev.replace(new RegExp(`@${tabToRemove.title}\\s*`, 'g'), ''))
     }
@@ -199,7 +196,6 @@ function NewTabPage() {
   const submitListening = () => {
     setIsListening(false)
     setListeningTime(0)
-    // Here you would normally process the voice input
     setInputText("Voice input processed...")
     setTimeout(() => {
       handleSendMessage()
@@ -212,23 +208,13 @@ function NewTabPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Wave Animation Component
   const WaveAnimation = () => (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "3px",
-      height: "30px"
-    }}>
+    <div className="flex items-center justify-center gap-0.5 h-8">
       {[...Array(15)].map((_, i) => (
         <div
           key={i}
+          className="w-0.5 bg-gray-400 rounded-sm animate-wave"
           style={{
-            width: "2px",
-            backgroundColor: "#9ca3af",
-            borderRadius: "1px",
-            animation: `wave 1.5s ease-in-out infinite`,
             animationDelay: `${i * 0.1}s`,
             height: `${Math.random() * 20 + 5}px`
           }}
@@ -239,389 +225,142 @@ function NewTabPage() {
           0%, 100% { transform: scaleY(0.3); opacity: 0.3; }
           50% { transform: scaleY(1); opacity: 1; }
         }
+        .animate-wave {
+          animation: wave 1.5s ease-in-out infinite;
+        }
       `}</style>
     </div>
   )
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#f8f9fa",
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      display: "flex",
-      flexDirection: "column"
-    }}>
-      
+    <div className="min-h-screen bg-gray-50 font-sans flex flex-col">
       {messages.length === 0 ? (
-        // Welcome screen with main input component
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "40px 20px",
-          maxWidth: "600px",
-          margin: "0 auto",
-          width: "100%"
-        }}>
-          
-          {/* Main input component */}
-          <div style={{
-            width: "100%",
-            position: "relative",
-            background: "white",
-            borderRadius: "24px",
-            border: "1px solid #e1e5e9",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
-          }}>
-            
-            {/* Input area */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              padding: "16px 20px"
-            }}>
-              {/* Selected Tabs */}
+        <div className="flex-1 flex flex-col items-center justify-center px-5 py-10 max-w-[600px] mx-auto w-full">
+          <div className="w-full relative bg-white rounded-3xl border border-gray-200 shadow-lg">
+            <div className="flex flex-col gap-2 p-4 px-5">
               {selectedTabs.length > 0 && (
-                <div style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                  marginBottom: "8px"
-                }}>
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   {selectedTabs.map((tab) => (
                     <div
                       key={tab.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        background: "#e0f2fe",
-                        border: "1px solid #7dd3fc",
-                        borderRadius: "10px",
-                        padding: "8px 12px",
-                        fontSize: "12px",
-                        maxWidth: "200px"
-                      }}>
+                      className="flex items-center gap-2 bg-sky-100 border border-sky-300 rounded-xl px-3 py-2 text-xs max-w-[200px]"
+                    >
                       <img
                         src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
                         alt=""
-                        style={{
-                          width: 16,
-                          height: 16,
-                          borderRadius: 2,
-                          flexShrink: 0
-                        }}
+                        className="w-4 h-4 rounded-sm flex-shrink-0"
                         onError={(e) => {
                           e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
                         }}
                       />
-                      <div style={{
-                        flex: 1,
-                        minWidth: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "2px"
-                      }}>
-                        <div style={{
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          color: "#0c4a6e",
-                          fontWeight: "500",
-                          fontSize: "13px"
-                        }}>
+                      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <div className="truncate text-sky-900 font-medium text-sm">
                           {tab.title}
                         </div>
-                        <div style={{
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          color: "#0369a1",
-                          fontSize: "11px"
-                        }}>
+                        <div className="truncate text-sky-700 text-xs">
                           {tab.url ? new URL(tab.url).hostname : ""}
                         </div>
                       </div>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => tab.id && removeSelectedTab(tab.id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: "2px",
-                          color: "#0369a1",
-                          fontSize: "16px",
-                          lineHeight: "1",
-                          width: "16px",
-                          height: "16px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          borderRadius: "2px",
-                          flexShrink: 0
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "#bae6fd"
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "none"
-                        }}>
-                        ×
-                      </button>
+                        className="h-4 w-4 p-0 text-sky-700 hover:text-sky-900 hover:bg-sky-200"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Input row */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12
-              }}>
-                <CiSearch size={20} style={{ color: "#9ca3af", flexShrink: 0 }} />
+              <div className="flex items-center gap-3">
+                <Search className="w-5 h-5 text-gray-400 flex-shrink-0" />
                 <textarea
                   ref={inputRef}
                   value={inputText}
                   onChange={handleInputChange}
                   onKeyPress={handleKeyPress}
                   placeholder="Search, ask, or @-mention a tab"
-                  style={{
-                    flex: 1,
-                    border: "none",
-                    outline: "none",
-                    resize: "none",
-                    fontSize: "16px",
-                    lineHeight: "1.4",
-                    background: "transparent",
-                    color: "#374151",
-                    fontFamily: "inherit",
-                    minHeight: "20px",
-                    maxHeight: "120px"
-                  }}
+                  className="flex-1 border-none outline-none resize-none text-base leading-relaxed bg-transparent text-gray-700 font-sans min-h-[20px] max-h-[120px]"
                 />
               </div>
             </div>
 
-            {/* Listening interface */}
             {isListening && (
-              <div style={{
-                padding: "24px 20px",
-                textAlign: "center",
-                borderTop: "1px solid #f1f5f9",
-                borderRadius: "0 0 24px 24px"
-              }}>
-                <div style={{
-                  fontSize: "14px",
-                  color: "#6b7280",
-                  marginBottom: "16px",
-                  fontWeight: "400"
-                }}>
-                  Listening...
-                </div>
-                
+              <div className="p-6 text-center border-t border-gray-100 rounded-b-3xl">
+                <div className="text-sm text-gray-500 mb-4">Listening...</div>
                 <WaveAnimation />
-                
-                <div style={{
-                  fontSize: "18px",
-                  color: "#374151",
-                  marginTop: "16px",
-                  marginBottom: "20px",
-                  fontWeight: "300",
-                  letterSpacing: "1px"
-                }}>
+                <div className="text-lg text-gray-700 mt-4 mb-5 font-light tracking-wide">
                   {formatTime(listeningTime)}
                 </div>
-
-                <div style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: "16px"
-                }}>
-                  <button
+                <div className="flex justify-center gap-4">
+                  <Button
                     onClick={stopListening}
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "50%",
-                      background: "#ef4444",
-                      border: "none",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 0.2s ease",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "scale(1.05)"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "scale(1)"
-                    }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                      <path d="M18 6L6 18"/>
-                      <path d="M6 6l12 12"/>
-                    </svg>
-                  </button>
-
-                  <button
+                    size="icon"
+                    className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 shadow"
+                  >
+                    <X className="h-4 w-4 text-white" />
+                  </Button>
+                  <Button
                     onClick={submitListening}
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "50%",
-                      background: "#10b981",
-                      border: "none",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 0.2s ease",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "scale(1.05)"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "scale(1)"
-                    }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                      <path d="M20 6L9 17l-5-5"/>
-                    </svg>
-                  </button>
+                    size="icon"
+                    className="w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 shadow"
+                  >
+                    <Check className="h-4 w-4 text-white" />
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* Suggested prompts */}
             {!isListening && (
-              <div style={{
-                padding: "20px",
-                borderTop: "1px solid #f1f5f9",
-                borderRadius: "0 0 24px 24px"
-              }}>
-                <div style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px"
-                }}>
+              <div className="p-5 border-t border-gray-100 rounded-b-3xl">
+                <div className="flex flex-col gap-2">
                   {suggestedPrompts.map((prompt, index) => (
-                    <button
+                    <Button
                       key={index}
+                      variant="ghost"
                       onClick={() => handlePromptClick(prompt)}
-                      style={{
-                        padding: "12px 16px",
-                        background: "transparent",
-                        border: "none",
-                        borderRadius: "8px",
-                        fontSize: "14px",
-                        color: "#374151",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        transition: "all 0.2s ease",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "#f5f5f5"
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "transparent"
-                      }}>
-                      <FaRegMessage size={14} style={{ color: "#9ca3af", flexShrink: 0, marginTop: "1px" }} />
-                      <span style={{ flex: 1 }}>{prompt}</span>
-                    </button>
+                      className="justify-start gap-2 text-sm text-gray-700 font-normal h-auto py-3 px-4 hover:bg-gray-100"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
+                      <span className="flex-1 text-left">{prompt}</span>
+                    </Button>
                   ))}
                 </div>
-                
-                {/* Add tabs or files */}
-                <button
+
+                <Button
+                  variant="ghost"
                   onClick={() => {
                     setInputText("@")
                     setShowTabDropdown(true)
                     setDropdownPosition(0)
                     inputRef.current?.focus()
                   }}
-                  style={{
-                    width: "100%",
-                    padding: "12px 16px",
-                    background: "transparent",
-                    border: "none",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    color: "#6b7280",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginTop: "16px"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f5f5f5"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                  }}>
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8
-                  }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-                      <path d="M12 5v14"/>
-                      <path d="M5 12h14"/>
-                    </svg>
+                  className="w-full justify-between text-sm text-gray-500 h-auto py-3 px-4 mt-4 hover:bg-gray-100"
+                >
+                  <div className="flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
                     <span>Add tabs or files</span>
                   </div>
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    style={{ flexShrink: 0 }}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 p-0"
                     onClick={(e) => {
                       e.stopPropagation()
                       startListening()
-                    }}>
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                    <line x1="12" y1="19" x2="12" y2="23"/>
-                    <line x1="8" y1="23" x2="16" y2="23"/>
-                  </svg>
-                </button>
+                    }}
+                  >
+                    <Mic className="w-5 h-5" />
+                  </Button>
+                </Button>
               </div>
             )}
 
-            {/* Tab dropdown */}
             {showTabDropdown && (
-              <div style={{
-                position: "absolute",
-                top: "100%",
-                left: 0,
-                right: 0,
-                background: "white",
-                border: "1px solid #e0e0e0",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                maxHeight: "200px",
-                overflowY: "auto",
-                zIndex: 1000,
-                marginTop: "4px"
-              }}>
-                <div style={{
-                  padding: "8px 12px",
-                  fontSize: "12px",
-                  color: "#666",
-                  fontWeight: "500",
-                  borderBottom: "1px solid #f0f0f0"
-                }}>
+              <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto z-50 mt-1">
+                <div className="px-3 py-2 text-xs text-gray-500 font-medium border-b border-gray-100">
                   Select a tab
                 </div>
                 {allTabs
@@ -633,368 +372,155 @@ function NewTabPage() {
                   })
                   .slice(0, 8)
                   .map((tab) => (
-                  <div
-                    key={tab.id}
-                    onClick={() => handleTabSelect(tab)}
-                    style={{
-                      padding: "8px 12px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      borderBottom: "1px solid #f8f9fa",
-                      transition: "background 0.1s ease"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#f8f9fa"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "white"
-                    }}>
-                    <img
-                      src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
-                      alt=""
-                      style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: 2,
-                        flexShrink: 0
-                      }}
-                      onError={(e) => {
-                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
-                      }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: "13px",
-                        color: "#333",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}>
-                        {tab.title}
-                      </div>
-                      <div style={{
-                        fontSize: "11px",
-                        color: "#666",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}>
-                        {tab.url ? new URL(tab.url).hostname : ""}
+                    <div
+                      key={tab.id}
+                      onClick={() => handleTabSelect(tab)}
+                      className="px-3 py-2 cursor-pointer flex items-center gap-2 border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      <img
+                        src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
+                        alt=""
+                        className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-gray-700 truncate">{tab.title}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {tab.url ? new URL(tab.url).hostname : ""}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
         </div>
       ) : (
-        // Chat interface
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          maxWidth: "800px",
-          margin: "0 auto",
-          width: "100%",
-          padding: "40px 20px",
-          position: "relative"
-        }}>
-          
-          {/* Messages */}
-          <div style={{
-            flex: 1,
-            overflowY: "auto",
-            paddingBottom: "20px"
-          }}>
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  marginBottom: "16px",
-                  alignItems: message.isUser ? "flex-end" : "flex-start"
-                }}>
-                {/* Tab bubbles */}
-                {message.tabs && message.tabs.length > 0 && (
-                  <div style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
-                    marginBottom: "8px",
-                    alignItems: message.isUser ? "flex-end" : "flex-start"
-                  }}>
-                    {message.tabs.map((tab) => (
-                      <div
-                        key={tab.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                          padding: "10px 14px",
-                          borderRadius: "16px",
-                          background: "#1f2937",
-                          maxWidth: "320px"
-                        }}>
-                        <img
-                          src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
-                          alt=""
-                          style={{
-                            width: 20,
-                            height: 20,
-                            borderRadius: 4,
-                            flexShrink: 0
-                          }}
-                          onError={(e) => {
-                            e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
-                          }}
-                        />
-                        <div style={{
-                          flex: 1,
-                          minWidth: 0,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "2px"
-                        }}>
-                          <div style={{
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            color: "#f3f4f6",
-                            fontWeight: "500",
-                            fontSize: "13px"
-                          }}>
-                            {tab.title}
-                          </div>
-                          <div style={{
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            color: "#9ca3af",
-                            fontSize: "12px"
-                          }}>
-                            {tab.url ? new URL(tab.url).hostname : ""}
+        <div className="flex-1 flex flex-col max-w-[800px] mx-auto w-full px-5 py-10 relative">
+          <ScrollArea className="flex-1 pb-5">
+            <div className="space-y-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex flex-col",
+                    message.isUser ? "items-end" : "items-start"
+                  )}
+                >
+                  {message.tabs && message.tabs.length > 0 && (
+                    <div className={cn(
+                      "flex flex-col gap-1.5 mb-2",
+                      message.isUser ? "items-end" : "items-start"
+                    )}>
+                      {message.tabs.map((tab) => (
+                        <div
+                          key={tab.id}
+                          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl bg-gray-800 max-w-[320px]"
+                        >
+                          <img
+                            src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
+                            alt=""
+                            className="w-5 h-5 rounded flex-shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
+                            }}
+                          />
+                          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                            <div className="truncate text-gray-100 font-medium text-sm">
+                              {tab.title}
+                            </div>
+                            <div className="truncate text-gray-400 text-xs">
+                              {tab.url ? new URL(tab.url).hostname : ""}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {/* Message text bubble */}
-                {message.text && (
-                  <div
-                    style={{
-                      maxWidth: "70%",
-                      padding: "12px 18px",
-                      borderRadius: "20px",
-                      background: message.isUser ? "#7f1d1d" : "#374151",
-                      color: "#f3f4f6",
-                      fontSize: "14px",
-                      lineHeight: "1.5",
-                      whiteSpace: "pre-wrap"
-                    }}>
-                    {message.text}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                      ))}
+                    </div>
+                  )}
+                  {message.text && (
+                    <div
+                      className={cn(
+                        "max-w-[70%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
+                        message.isUser
+                          ? "bg-red-900 text-gray-100"
+                          : "bg-gray-700 text-gray-100"
+                      )}
+                    >
+                      {message.text}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
 
-          {/* Selected Tabs in chat interface */}
           {selectedTabs.length > 0 && (
-            <div style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "6px",
-              marginBottom: "12px"
-            }}>
+            <div className="flex flex-wrap gap-1.5 mb-3">
               {selectedTabs.map((tab) => (
                 <div
                   key={tab.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    background: "#e0f2fe",
-                    border: "1px solid #7dd3fc",
-                    borderRadius: "10px",
-                    padding: "8px 12px",
-                    fontSize: "12px",
-                    maxWidth: "200px"
-                  }}>
+                  className="flex items-center gap-2 bg-sky-100 border border-sky-300 rounded-xl px-3 py-2 text-xs max-w-[200px]"
+                >
                   <img
                     src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
                     alt=""
-                    style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 2,
-                      flexShrink: 0
-                    }}
+                    className="w-4 h-4 rounded-sm flex-shrink-0"
                     onError={(e) => {
                       e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
                     }}
                   />
-                  <div style={{
-                    flex: 1,
-                    minWidth: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "2px"
-                  }}>
-                    <div style={{
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      color: "#0c4a6e",
-                      fontWeight: "500",
-                      fontSize: "13px"
-                    }}>
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <div className="truncate text-sky-900 font-medium text-sm">
                       {tab.title}
                     </div>
-                    <div style={{
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      color: "#0369a1",
-                      fontSize: "11px"
-                    }}>
+                    <div className="truncate text-sky-700 text-xs">
                       {tab.url ? new URL(tab.url).hostname : ""}
                     </div>
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => tab.id && removeSelectedTab(tab.id)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: "2px",
-                      color: "#0369a1",
-                      fontSize: "16px",
-                      lineHeight: "1",
-                      width: "16px",
-                      height: "16px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: "2px",
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#bae6fd"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "none"
-                    }}>
-                    ×
-                  </button>
+                    className="h-4 w-4 p-0 text-sky-700 hover:text-sky-900 hover:bg-sky-200"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Input area */}
-          <div style={{
-            background: "white",
-            borderRadius: "24px",
-            border: "1px solid #e1e5e9",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            padding: "16px 20px",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            position: "relative"
-          }}>
+          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm px-5 py-4 flex items-center gap-3 relative">
             <textarea
               ref={inputRef}
               value={inputText}
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               placeholder="Ask another question..."
-              style={{
-                flex: 1,
-                border: "none",
-                outline: "none",
-                resize: "none",
-                fontSize: "14px",
-                lineHeight: "1.4",
-                background: "transparent",
-                color: "#374151",
-                fontFamily: "inherit",
-                minHeight: "20px",
-                maxHeight: "100px"
-              }}
+              className="flex-1 border-none outline-none resize-none text-sm leading-relaxed bg-transparent text-gray-700 font-sans min-h-[20px] max-h-[100px]"
             />
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={startListening}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                padding: "4px",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginRight: "8px"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#f5f5f5"
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent"
-              }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </button>
-            <button
+              className="h-8 w-8 hover:bg-gray-100"
+            >
+              <Mic className="w-5 h-5 text-gray-500" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={handleSendMessage}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                padding: "4px",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-              }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
-                <path d="M22 2L11 13"/>
-                <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
-              </svg>
-            </button>
+              className="h-8 w-8"
+            >
+              <Send className="w-5 h-5 text-gray-400" />
+            </Button>
 
-            {/* Tab dropdown for chat interface */}
             {showTabDropdown && (
-              <div style={{
-                position: "absolute",
-                bottom: "100%",
-                left: 0,
-                right: 0,
-                background: "white",
-                border: "1px solid #e0e0e0",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                maxHeight: "200px",
-                overflowY: "auto",
-                zIndex: 1000,
-                marginBottom: "4px"
-              }}>
-                <div style={{
-                  padding: "8px 12px",
-                  fontSize: "12px",
-                  color: "#666",
-                  fontWeight: "500",
-                  borderBottom: "1px solid #f0f0f0"
-                }}>
+              <div className="absolute bottom-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[200px] overflow-y-auto z-50 mb-1">
+                <div className="px-3 py-2 text-xs text-gray-500 font-medium border-b border-gray-100">
                   Select a tab
                 </div>
                 {allTabs
@@ -1006,59 +532,27 @@ function NewTabPage() {
                   })
                   .slice(0, 8)
                   .map((tab) => (
-                  <div
-                    key={tab.id}
-                    onClick={() => handleTabSelect(tab)}
-                    style={{
-                      padding: "8px 12px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      borderBottom: "1px solid #f8f9fa",
-                      transition: "background 0.1s ease"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#f8f9fa"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "white"
-                    }}>
-                    <img
-                      src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
-                      alt=""
-                      style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: 2,
-                        flexShrink: 0
-                      }}
-                      onError={(e) => {
-                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
-                      }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: "13px",
-                        color: "#333",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}>
-                        {tab.title}
-                      </div>
-                      <div style={{
-                        fontSize: "11px",
-                        color: "#666",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}>
-                        {tab.url ? new URL(tab.url).hostname : ""}
+                    <div
+                      key={tab.id}
+                      onClick={() => handleTabSelect(tab)}
+                      className="px-3 py-2 cursor-pointer flex items-center gap-2 border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      <img
+                        src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
+                        alt=""
+                        className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-gray-700 truncate">{tab.title}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {tab.url ? new URL(tab.url).hostname : ""}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
@@ -1068,4 +562,4 @@ function NewTabPage() {
   )
 }
 
-export default NewTabPage 
+export default NewTabPage
