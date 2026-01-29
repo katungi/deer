@@ -111,26 +111,27 @@ function FloatingChat() {
   const handleTabSelect = (tab: Tab) => {
     if (!selectedTabs.find(t => t.id === tab.id)) {
       setSelectedTabs(prev => [...prev, tab])
-      setInputText(prev => prev.replace('@', `@${tab.title} `))
+      // Remove the @ from input - the styled chip shows the selected tab
+      setInputText(prev => prev.replace('@', ''))
     }
     setShowTabDropdown(false)
   }
 
   const removeSelectedTab = (tabId: number) => {
-    const tabToRemove = selectedTabs.find(tab => tab.id === tabId)
     setSelectedTabs(prev => prev.filter(tab => tab.id !== tabId))
-    
-    if (tabToRemove && tabToRemove.title) {
-      setInputText(prev => prev.replace(new RegExp(`@${tabToRemove.title}\\s*`, 'g'), ''))
-    }
   }
 
   const autoResizeTextarea = () => {
     if (inputRef.current) {
-      inputRef.current.style.height = '20px'
+      inputRef.current.style.height = 'auto'
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 100) + 'px'
     }
   }
+
+  // Auto-resize textarea when inputText changes programmatically
+  useEffect(() => {
+    autoResizeTextarea()
+  }, [inputText])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
@@ -508,12 +509,12 @@ function FloatingChat() {
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
-                    background: "#e8e8e8",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "8px",
+                    background: "#e0f2fe",
+                    border: "1px solid #7dd3fc",
+                    borderRadius: "10px",
                     padding: "4px 8px",
                     fontSize: "11px",
-                    maxWidth: "120px"
+                    maxWidth: "140px"
                   }}>
                   <img
                     src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
@@ -526,7 +527,8 @@ function FloatingChat() {
                     }}
                   />
                   <span style={{
-                    color: "#333",
+                    color: "#0c4a6e",
+                    fontWeight: "500",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -541,10 +543,16 @@ function FloatingChat() {
                       border: "none",
                       cursor: "pointer",
                       padding: "0",
-                      color: "#666",
+                      color: "#0369a1",
                       fontSize: "12px",
                       lineHeight: 1,
                       flexShrink: 0
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "#075985"
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "#0369a1"
                     }}>
                     ×
                   </button>
@@ -559,7 +567,7 @@ function FloatingChat() {
               ref={inputRef}
               value={inputText}
               onChange={handleInputChange}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               placeholder="Ask anything..."
               style={{
                 flex: 1,
@@ -567,12 +575,13 @@ function FloatingChat() {
                 outline: "none",
                 resize: "none",
                 fontSize: "13px",
-                lineHeight: "1.4",
+                lineHeight: "1.5",
                 background: "transparent",
                 color: "#333",
                 fontFamily: "inherit",
-                minHeight: "18px",
-                maxHeight: "80px"
+                minHeight: "20px",
+                maxHeight: "100px",
+                overflow: "hidden"
               }}
             />
             <button

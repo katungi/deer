@@ -7,6 +7,7 @@ interface Message {
   text: string
   isUser: boolean
   timestamp: Date
+  tabs?: Tab[]
 }
 
 interface Tab {
@@ -84,13 +85,16 @@ function NewTabPage() {
   }, [isListening])
 
   const handleSendMessage = () => {
-    if (!inputText.trim()) return
+    if (!inputText.trim() && selectedTabs.length === 0) return
+
+    const messageText = inputText.trim()
 
     const newMessage: Message = {
       id: Date.now().toString(),
-      text: inputText,
+      text: messageText,
       isUser: true,
-      timestamp: new Date()
+      timestamp: new Date(),
+      tabs: selectedTabs.length > 0 ? [...selectedTabs] : undefined
     }
 
     setMessages(prev => [...prev, newMessage])
@@ -108,6 +112,7 @@ function NewTabPage() {
     }, 1000)
 
     setInputText("")
+    setSelectedTabs([])
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -293,8 +298,8 @@ function NewTabPage() {
                         display: "flex",
                         alignItems: "center",
                         gap: "8px",
-                        background: "#e8e8e8",
-                        border: "1px solid #d0d0d0",
+                        background: "#e0f2fe",
+                        border: "1px solid #7dd3fc",
                         borderRadius: "10px",
                         padding: "8px 12px",
                         fontSize: "12px",
@@ -313,7 +318,7 @@ function NewTabPage() {
                           e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
                         }}
                       />
-                      <div style={{ 
+                      <div style={{
                         flex: 1,
                         minWidth: 0,
                         display: "flex",
@@ -324,7 +329,7 @@ function NewTabPage() {
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
-                          color: "#333",
+                          color: "#0c4a6e",
                           fontWeight: "500",
                           fontSize: "13px"
                         }}>
@@ -334,7 +339,7 @@ function NewTabPage() {
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
-                          color: "#666",
+                          color: "#0369a1",
                           fontSize: "11px"
                         }}>
                           {tab.url ? new URL(tab.url).hostname : ""}
@@ -347,7 +352,7 @@ function NewTabPage() {
                           border: "none",
                           cursor: "pointer",
                           padding: "2px",
-                          color: "#666",
+                          color: "#0369a1",
                           fontSize: "16px",
                           lineHeight: "1",
                           width: "16px",
@@ -359,7 +364,7 @@ function NewTabPage() {
                           flexShrink: 0
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "#f0f0f0"
+                          e.currentTarget.style.background = "#bae6fd"
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.background = "none"
@@ -709,21 +714,91 @@ function NewTabPage() {
                 key={message.id}
                 style={{
                   display: "flex",
-                  justifyContent: message.isUser ? "flex-end" : "flex-start",
-                  marginBottom: "16px"
+                  flexDirection: "column",
+                  marginBottom: "16px",
+                  alignItems: message.isUser ? "flex-end" : "flex-start"
                 }}>
-                <div
-                  style={{
-                    maxWidth: "70%",
-                    padding: "12px 18px",
-                    borderRadius: "20px",
-                    background: message.isUser ? "#8b5cf6" : "#f1f3f4",
-                    color: message.isUser ? "white" : "#374151",
-                    fontSize: "14px",
-                    lineHeight: "1.5"
+                {/* Tab bubbles */}
+                {message.tabs && message.tabs.length > 0 && (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                    marginBottom: "8px",
+                    alignItems: message.isUser ? "flex-end" : "flex-start"
                   }}>
-                  {message.text}
-                </div>
+                    {message.tabs.map((tab) => (
+                      <div
+                        key={tab.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 14px",
+                          borderRadius: "16px",
+                          background: "#1f2937",
+                          maxWidth: "320px"
+                        }}>
+                        <img
+                          src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
+                          alt=""
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 4,
+                            flexShrink: 0
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
+                          }}
+                        />
+                        <div style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}>
+                          <div style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            color: "#f3f4f6",
+                            fontWeight: "500",
+                            fontSize: "13px"
+                          }}>
+                            {tab.title}
+                          </div>
+                          <div style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            color: "#9ca3af",
+                            fontSize: "12px"
+                          }}>
+                            {tab.url ? new URL(tab.url).hostname : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Message text bubble */}
+                {message.text && (
+                  <div
+                    style={{
+                      maxWidth: "70%",
+                      padding: "12px 18px",
+                      borderRadius: "20px",
+                      background: message.isUser ? "#7f1d1d" : "#374151",
+                      color: "#f3f4f6",
+                      fontSize: "14px",
+                      lineHeight: "1.5",
+                      whiteSpace: "pre-wrap"
+                    }}>
+                    {message.text}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -743,8 +818,8 @@ function NewTabPage() {
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",
-                    background: "#e8e8e8",
-                    border: "1px solid #d0d0d0",
+                    background: "#e0f2fe",
+                    border: "1px solid #7dd3fc",
                     borderRadius: "10px",
                     padding: "8px 12px",
                     fontSize: "12px",
@@ -763,7 +838,7 @@ function NewTabPage() {
                       e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
                     }}
                   />
-                  <div style={{ 
+                  <div style={{
                     flex: 1,
                     minWidth: 0,
                     display: "flex",
@@ -774,7 +849,7 @@ function NewTabPage() {
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-                      color: "#333",
+                      color: "#0c4a6e",
                       fontWeight: "500",
                       fontSize: "13px"
                     }}>
@@ -784,7 +859,7 @@ function NewTabPage() {
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-                      color: "#666",
+                      color: "#0369a1",
                       fontSize: "11px"
                     }}>
                       {tab.url ? new URL(tab.url).hostname : ""}
@@ -797,7 +872,7 @@ function NewTabPage() {
                       border: "none",
                       cursor: "pointer",
                       padding: "2px",
-                      color: "#666",
+                      color: "#0369a1",
                       fontSize: "16px",
                       lineHeight: "1",
                       width: "16px",
@@ -809,7 +884,7 @@ function NewTabPage() {
                       flexShrink: 0
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#f0f0f0"
+                      e.currentTarget.style.background = "#bae6fd"
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = "none"

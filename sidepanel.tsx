@@ -5,6 +5,7 @@ interface Message {
   text: string
   isUser: boolean
   timestamp: Date
+  tabs?: Tab[]
 }
 
 interface Tab {
@@ -22,7 +23,7 @@ function IndexSidepanel() {
   const [allTabs, setAllTabs] = useState<Tab[]>([])
   const [showTabDropdown, setShowTabDropdown] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState(0)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const inputRef = useRef<HTMLDivElement>(null)
 
   const suggestedPrompts = [
     "Summarize this repo",
@@ -63,17 +64,25 @@ function IndexSidepanel() {
   }, [])
 
   const handleSendMessage = () => {
-    if (!inputText.trim()) return
+    const messageText = getPlainText().trim()
+    if (!messageText && selectedTabs.length === 0) return
 
     const newMessage: Message = {
       id: Date.now().toString(),
-      text: inputText,
+      text: messageText,
       isUser: true,
-      timestamp: new Date()
+      timestamp: new Date(),
+      tabs: selectedTabs.length > 0 ? [...selectedTabs] : undefined
     }
 
     setMessages(prev => [...prev, newMessage])
     setInputText("")
+    setSelectedTabs([])
+    
+    // Clear the contenteditable
+    if (inputRef.current) {
+      inputRef.current.innerHTML = ""
+    }
 
     // Simulate AI response
     setTimeout(() => {
@@ -89,57 +98,113 @@ function IndexSidepanel() {
 
   const handlePromptClick = (prompt: string) => {
     setInputText(prompt)
-  }
-
-  const autoResizeTextarea = () => {
     if (inputRef.current) {
-      inputRef.current.style.height = '20px'
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 100) + 'px'
+      inputRef.current.textContent = prompt
+      // Move cursor to end
+      const range = document.createRange()
+      const sel = window.getSelection()
+      range.selectNodeContents(inputRef.current)
+      range.collapse(false)
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+      inputRef.current.focus()
     }
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
-    setInputText(value)
+  // Get plain text content from the contenteditable div
+  const getPlainText = () => {
+    if (!inputRef.current) return ""
+    
+    let text = ""
+    inputRef.current.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement
+        if (el.dataset.tabId) {
+          text += `@[${el.dataset.tabTitle}]`
+        }
+      }
+    })
+    return text
+  }
 
-    // Auto-resize textarea
-    autoResizeTextarea()
-
-    // Check for @ symbol
-    const cursorPosition = e.target.selectionStart
-    const textBeforeCursor = value.substring(0, cursorPosition)
+  const handleInput = () => {
+    if (!inputRef.current) return
+    
+    const text = inputRef.current.textContent || ""
+    setInputText(text)
+    
+    // Check for @ symbol at the end
+    const selection = window.getSelection()
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0)
+      const textBeforeCursor = text.substring(0, range.startOffset)
     const lastAtIndex = textBeforeCursor.lastIndexOf('@')
     
-    if (lastAtIndex !== -1 && lastAtIndex === cursorPosition - 1) {
+      if (lastAtIndex !== -1 && lastAtIndex === textBeforeCursor.length - 1) {
       setShowTabDropdown(true)
       setDropdownPosition(lastAtIndex)
     } else {
       setShowTabDropdown(false)
+      }
     }
   }
 
   const handleTabSelect = (tab: Tab) => {
+    if (!inputRef.current) return
+    
+    // Add tab to selected tabs if not already there
     if (!selectedTabs.find(t => t.id === tab.id)) {
       setSelectedTabs(prev => [...prev, tab])
     }
     setShowTabDropdown(false)
     
-    // Replace @ with tab reference in input
-    const beforeAt = inputText.substring(0, dropdownPosition)
-    const afterAt = inputText.substring(dropdownPosition + 1)
-    setInputText(beforeAt + `@${tab.title} ` + afterAt)
+    // Remove the @ and insert a styled chip
+    const content = inputRef.current.innerHTML
+    const lastAtIndex = content.lastIndexOf('@')
+    
+    if (lastAtIndex !== -1) {
+      // Create the chip HTML
+      const chipHtml = `<span contenteditable="false" data-tab-id="${tab.id}" data-tab-title="${tab.title}" style="display: inline-flex; align-items: center; gap: 4px; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; padding: 2px 8px; margin: 0 2px; font-size: 13px; color: #0c4a6e; font-weight: 500; vertical-align: middle; user-select: none;">${tab.title}<button onclick="this.parentElement.remove(); window.dispatchEvent(new CustomEvent('tabChipRemoved', {detail: ${tab.id}}))" style="background: none; border: none; cursor: pointer; padding: 0 0 0 4px; color: #0369a1; font-size: 14px; line-height: 1;">×</button></span>&nbsp;`
+      
+      inputRef.current.innerHTML = content.substring(0, lastAtIndex) + chipHtml + content.substring(lastAtIndex + 1)
+      
+      // Move cursor to end
+      const range = document.createRange()
+      const sel = window.getSelection()
+      range.selectNodeContents(inputRef.current)
+      range.collapse(false)
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+      inputRef.current.focus()
+    }
+    
+    setInputText(getPlainText())
   }
 
   const removeSelectedTab = (tabId: number) => {
-    const tabToRemove = selectedTabs.find(tab => tab.id === tabId)
     setSelectedTabs(prev => prev.filter(tab => tab.id !== tabId))
     
-    // Also remove tab references from input text
-    if (tabToRemove && tabToRemove.title) {
-      const tabReference = `@${tabToRemove.title}`
-      setInputText(prev => prev.replace(new RegExp(`@${tabToRemove.title}\\s*`, 'g'), ''))
+    // Also remove chip from input
+    if (inputRef.current) {
+      const chip = inputRef.current.querySelector(`[data-tab-id="${tabId}"]`)
+      if (chip) {
+        chip.remove()
+      }
     }
   }
+
+  // Listen for chip removal events
+  useEffect(() => {
+    const handleChipRemoved = (e: CustomEvent) => {
+      removeSelectedTab(e.detail)
+    }
+    window.addEventListener('tabChipRemoved', handleChipRemoved as EventListener)
+    return () => {
+      window.removeEventListener('tabChipRemoved', handleChipRemoved as EventListener)
+    }
+  }, [])
 
   const handleEject = () => {
     chrome.tabs.create({
@@ -147,13 +212,17 @@ function IndexSidepanel() {
     })
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
     }
     if (e.key === 'Escape') {
       setShowTabDropdown(false)
+    }
+    if (e.key === 'Backspace') {
+      // Handle backspace on chip
+      setTimeout(() => handleInput(), 0)
     }
   }
 
@@ -166,6 +235,21 @@ function IndexSidepanel() {
         background: "white",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       }}>
+      <style>{`
+        [contenteditable][data-placeholder]:empty:before {
+          content: attr(data-placeholder);
+          color: #9ca3af;
+          pointer-events: none;
+        }
+        /* Hide scrollbars but allow scrolling */
+        * {
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE/Edge */
+        }
+        *::-webkit-scrollbar {
+          display: none; /* Chrome, Safari, Opera */
+        }
+      `}</style>
       
       {/* Header with eject button */}
       <div style={{
@@ -292,29 +376,99 @@ function IndexSidepanel() {
           <div style={{
             flex: 1,
             overflowY: "auto",
-            padding: "20px"
+            padding: "20px",
+            background: "#111827"
           }}>
             {messages.map((message) => (
               <div
                 key={message.id}
                 style={{
                   display: "flex",
+                  flexDirection: "column",
                   marginBottom: "16px",
-                  justifyContent: message.isUser ? "flex-end" : "flex-start"
+                  alignItems: message.isUser ? "flex-end" : "flex-start"
                 }}>
+                {/* Tab bubbles */}
+                {message.tabs && message.tabs.length > 0 && (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                    marginBottom: "8px",
+                    alignItems: message.isUser ? "flex-end" : "flex-start"
+                  }}>
+                    {message.tabs.map((tab) => (
+                      <div
+                        key={tab.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 14px",
+                          borderRadius: "50px",
+                          background: "#1f2937",
+                          maxWidth: "280px"
+                        }}>
+                        <img
+                          src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
+                          alt=""
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 4,
+                            flexShrink: 0
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
+                          }}
+                        />
+                        <div style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}>
+                          <div style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            color: "#f3f4f6",
+                            fontWeight: "500",
+                            fontSize: "13px"
+                          }}>
+                            {tab.title}
+                          </div>
+                          <div style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            color: "#9ca3af",
+                            fontSize: "12px"
+                          }}>
+                            {tab.url ? new URL(tab.url).hostname : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Message text bubble */}
+                {message.text && (
                 <div
                   style={{
-                    maxWidth: "80%",
-                    padding: "12px 16px",
-                    borderRadius: "16px",
-                    background: message.isUser ? "#8b5cf6" : "white",
-                    color: message.isUser ? "white" : "#333",
+                      maxWidth: "85%",
+                      padding: "10px 16px",
+                      borderRadius: "30px",
+                      background: message.isUser ? "#7f1d1d" : "#374151",
+                      color: "#f3f4f6",
                     fontSize: "14px",
-                    lineHeight: "1.4",
-                    border: message.isUser ? "none" : "1px solid #e0e0e0"
+                      lineHeight: "1.5",
+                      whiteSpace: "pre-wrap"
                   }}>
                   {message.text}
                 </div>
+                )}
               </div>
             ))}
           </div>
@@ -404,17 +558,94 @@ function IndexSidepanel() {
 
       {/* Input Area */}
       <div style={{
-        padding: "16px 20px 20px",
+        padding: "12px 16px 16px",
         background: "white"
       }}>
+        {/* Quick action chips */}
+        <div style={{
+          display: "flex",
+          gap: "8px",
+          marginBottom: "12px"
+        }}>
+          <button
+            onClick={() => handlePromptClick("Explain this page")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              background: "#f3f4f6",
+              border: "none",
+              borderRadius: "20px",
+              fontSize: "13px",
+              color: "#374151",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "#e5e7eb"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "#f3f4f6"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+            Explain
+          </button>
+          <button
+            onClick={() => handlePromptClick("Summarize this page")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              background: "#f3f4f6",
+              border: "none",
+              borderRadius: "20px",
+              fontSize: "13px",
+              color: "#374151",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "#e5e7eb"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "#f3f4f6"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 6h16M4 10h16M4 14h10M4 18h6"/>
+            </svg>
+            Summarize
+          </button>
+          <button
+            onClick={() => handlePromptClick("Analyze this page")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              background: "#f3f4f6",
+              border: "none",
+              borderRadius: "20px",
+              fontSize: "13px",
+              color: "#374151",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "#e5e7eb"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "#f3f4f6"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            Analyze
+          </button>
+        </div>
+
+        {/* Main input box */}
         <div style={{
           display: "flex",
           flexDirection: "column",
-          gap: "8px",
-          background: "#f8f9fa",
-          borderRadius: "24px",
-          padding: "12px 16px",
-          border: "1px solid #e0e0e0",
+          background: "#374151",
+          borderRadius: "16px",
+          padding: "12px 14px",
           minHeight: "44px"
         }}>
           {/* Selected Tabs inside input area */}
@@ -423,7 +654,7 @@ function IndexSidepanel() {
               display: "flex",
               flexWrap: "wrap",
               gap: "6px",
-              marginBottom: selectedTabs.length > 0 ? "8px" : "0"
+              marginBottom: "10px"
             }}>
               {selectedTabs.map((tab) => (
                 <div
@@ -431,77 +662,50 @@ function IndexSidepanel() {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "8px",
-                    background: "#e8e8e8",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "10px",
-                    padding: "8px 12px",
+                    gap: "6px",
+                    background: "#4b5563",
+                    borderRadius: "8px",
+                    padding: "6px 10px",
                     fontSize: "12px",
                     maxWidth: "150px"
                   }}>
                   <img
-                    src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'}
+                    src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
                     alt=""
                     style={{
-                      width: 16,
-                      height: 16,
+                      width: 14,
+                      height: 14,
                       borderRadius: 2,
                       flexShrink: 0
                     }}
                     onError={(e) => {
-                      e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23e2e8f0"/></svg>'
+                      e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
                     }}
                   />
-                  <div style={{ 
-                    flex: 1,
-                    minWidth: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "2px"
-                  }}>
-                    <div style={{
+                  <span style={{
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-                      color: "#333",
+                    color: "#e5e7eb",
                       fontWeight: "500",
-                      fontSize: "13px"
+                    fontSize: "12px"
                     }}>
                       {tab.title}
-                    </div>
-                    <div style={{
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      color: "#666",
-                      fontSize: "11px"
-                    }}>
-                      {tab.url ? new URL(tab.url).hostname : ""}
-                    </div>
-                  </div>
+                  </span>
                   <button
                     onClick={() => tab.id && removeSelectedTab(tab.id)}
                     style={{
                       background: "none",
                       border: "none",
                       cursor: "pointer",
-                      padding: "2px",
-                      color: "#666",
-                      fontSize: "16px",
+                      padding: "0",
+                      color: "#9ca3af",
+                      fontSize: "14px",
                       lineHeight: "1",
-                      width: "16px",
-                      height: "16px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      borderRadius: "2px",
                       flexShrink: 0
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#f0f0f0"
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "none"
                     }}>
                     ×
                   </button>
@@ -510,99 +714,142 @@ function IndexSidepanel() {
             </div>
           )}
 
-          {/* Input row */}
-          <div style={{
-            display: "flex",
-            alignItems: "flex-end",
-            gap: "12px"
-          }}>
-            <textarea
+          {/* Input text area */}
+          <div
               ref={inputRef}
-              value={inputText}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyPress}
-              placeholder="Ask a question about this page..."
+            contentEditable
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            data-placeholder="Ask a question about this page..."
               style={{
-                flex: 1,
                 border: "none",
                 background: "transparent",
-                resize: "none",
                 outline: "none",
                 fontSize: "14px",
-                color: "#333",
-                lineHeight: "1.4",
+              color: "#e5e7eb",
+              lineHeight: "1.5",
                 minHeight: "20px",
                 maxHeight: "100px",
-                fontFamily: "inherit"
-              }}
-              rows={1}
-            />
-            
-            <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+              fontFamily: "inherit",
+              overflowY: "auto",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              marginBottom: "10px"
+            }}
+            suppressContentEditableWarning
+          />
+
+          {/* Bottom toolbar */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            {/* Left icons */}
+            <div style={{ display: "flex", gap: "4px" }}>
               <button style={{
                 background: "none",
                 border: "none",
-                padding: "8px",
+                padding: "6px",
                 cursor: "pointer",
-                borderRadius: "50%",
+                borderRadius: "6px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
-              }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="#666">
-                  <path d="M10 2V18M2 10H18" strokeWidth="2" stroke="currentColor"/>
+                justifyContent: "center",
+                color: "#9ca3af"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#4b5563"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14"/>
                 </svg>
               </button>
               
               <button style={{
                 background: "none",
                 border: "none",
-                padding: "8px",
+                padding: "6px",
                 cursor: "pointer",
-                borderRadius: "50%",
+                borderRadius: "6px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
-              }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="#666">
-                  <path d="M3 4C3 2.89543 3.89543 2 5 2H15C16.1046 2 17 2.89543 17 4V16C17 17.1046 16.1046 18 15 18H5C3.89543 18 3 17.1046 3 16V4Z" stroke="currentColor" strokeWidth="2" fill="none"/>
-                  <circle cx="10" cy="8" r="2" stroke="currentColor" strokeWidth="2" fill="none"/>
-                  <path d="M15 14L12 11L8 15L6 13L3 16" stroke="currentColor" strokeWidth="2" fill="none"/>
+                justifyContent: "center",
+                color: "#9ca3af"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#4b5563"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="6" cy="12" r="2"/>
+                  <circle cx="12" cy="12" r="2"/>
+                  <circle cx="18" cy="12" r="2"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Right icons */}
+            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+              <button style={{
+                background: "none",
+                border: "none",
+                padding: "6px",
+                cursor: "pointer",
+                borderRadius: "6px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#9ca3af"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#4b5563"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <path d="M21 15l-5-5L5 21"/>
                 </svg>
               </button>
 
               <button style={{
                 background: "none",
                 border: "none",
-                padding: "8px",
+                padding: "6px",
                 cursor: "pointer",
-                borderRadius: "50%",
+                borderRadius: "6px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center"
-              }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="#666">
-                  <path d="M6 4C6 2.89543 6.89543 2 8 2H12C13.1046 2 14 2.89543 14 4V10C14 11.1046 13.1046 12 12 12H8C6.89543 12 6 11.1046 6 10V4Z" stroke="currentColor" strokeWidth="2" fill="none"/>
-                  <path d="M10 12V16M7 18H13" stroke="currentColor" strokeWidth="2"/>
+                justifyContent: "center",
+                color: "#9ca3af"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#4b5563"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
                 </svg>
               </button>
               
               <button
                 onClick={handleSendMessage}
-                disabled={!inputText.trim()}
+                disabled={!inputText.trim() && selectedTabs.length === 0}
                 style={{
-                  background: inputText.trim() ? "#007AFF" : "#e0e0e0",
+                  background: (inputText.trim() || selectedTabs.length > 0) ? "#3b82f6" : "#4b5563",
                   border: "none",
-                  padding: "8px",
-                  cursor: inputText.trim() ? "pointer" : "not-allowed",
-                  borderRadius: "50%",
+                  padding: "6px",
+                  cursor: (inputText.trim() || selectedTabs.length > 0) ? "pointer" : "default",
+                  borderRadius: "8px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  transition: "all 0.2s ease"
+                  transition: "all 0.2s ease",
+                  marginLeft: "4px"
                 }}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill={inputText.trim() ? "white" : "#666"}>
-                  <path d="M2 2L14 8L2 14V9L10 8L2 7V2Z" fill="currentColor"/>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
               </button>
             </div>
