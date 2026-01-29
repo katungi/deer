@@ -262,7 +262,7 @@ function IndexSidepanel() {
           </div>
         ) : (
           /* Messages */
-          <ScrollArea className="flex-1 bg-gray-900">
+          <ScrollArea className="flex-1 bg-white">
             <div className="p-5 space-y-4">
               {messages.map((message) => (
                 <div
@@ -281,21 +281,21 @@ function IndexSidepanel() {
                       {message.tabs.map((tab) => (
                         <div
                           key={tab.id}
-                          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-gray-800 max-w-[280px]"
+                          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-stone-100 max-w-[280px]"
                         >
                           <img
-                            src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
+                            src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'}
                             alt=""
                             className="w-5 h-5 rounded flex-shrink-0"
                             onError={(e) => {
-                              e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
+                              e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'
                             }}
                           />
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                            <div className="truncate text-gray-100 font-medium text-sm">
+                            <div className="truncate text-stone-800 font-medium text-sm">
                               {tab.title}
                             </div>
-                            <div className="truncate text-gray-400 text-xs">
+                            <div className="truncate text-stone-500 text-xs">
                               {tab.url ? new URL(tab.url).hostname : ""}
                             </div>
                           </div>
@@ -309,8 +309,8 @@ function IndexSidepanel() {
                       className={cn(
                         "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
                         message.isUser
-                          ? "bg-red-900 text-gray-100"
-                          : "bg-gray-700 text-gray-100"
+                          ? "bg-rose-600 text-white"
+                          : "bg-stone-100 text-stone-800"
                       )}
                     >
                       {message.text}
@@ -362,7 +362,7 @@ function IndexSidepanel() {
             variant="secondary"
             size="sm"
             onClick={() => handlePromptClick("Explain this page")}
-            className="rounded-full text-xs gap-1.5"
+            className="rounded-full text-xs gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
@@ -373,7 +373,7 @@ function IndexSidepanel() {
             variant="secondary"
             size="sm"
             onClick={() => handlePromptClick("Summarize this page")}
-            className="rounded-full text-xs gap-1.5"
+            className="rounded-full text-xs gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M4 6h16M4 10h16M4 14h10M4 18h6"/>
@@ -384,7 +384,7 @@ function IndexSidepanel() {
             variant="secondary"
             size="sm"
             onClick={() => handlePromptClick("Analyze this page")}
-            className="rounded-full text-xs gap-1.5"
+            className="rounded-full text-xs gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/>
@@ -395,29 +395,29 @@ function IndexSidepanel() {
         </div>
 
         {/* Main input box */}
-        <div className="flex flex-col bg-gray-700 rounded-2xl p-3 min-h-[44px]">
+        <div className="flex flex-col bg-white border border-stone-200 rounded-2xl p-3 min-h-[44px]">
           {/* Selected Tabs inside input area */}
           {selectedTabs.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2.5">
               {selectedTabs.map((tab) => (
                 <div
                   key={tab.id}
-                  className="flex items-center gap-1.5 bg-gray-600 rounded-lg px-2.5 py-1.5 text-xs max-w-[150px]"
+                  className="flex items-center gap-1.5 bg-rose-100 border border-rose-200 rounded-lg px-2.5 py-1.5 text-xs max-w-[150px]"
                 >
                   <img
-                    src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'}
+                    src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23fda4af"/></svg>'}
                     alt=""
                     className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
                     onError={(e) => {
-                      e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%236b7280"/></svg>'
+                      e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23fda4af"/></svg>'
                     }}
                   />
-                  <span className="truncate text-gray-200 font-medium text-xs">
+                  <span className="truncate text-rose-800 font-medium text-xs">
                     {tab.title}
                   </span>
                   <button
                     onClick={() => tab.id && removeSelectedTab(tab.id)}
-                    className="bg-transparent border-none cursor-pointer p-0 text-gray-400 text-sm leading-none flex-shrink-0 hover:text-gray-200"
+                    className="bg-transparent border-none cursor-pointer p-0 text-rose-500 text-sm leading-none flex-shrink-0 hover:text-rose-700"
                   >
                     ×
                   </button>
@@ -433,7 +433,7 @@ function IndexSidepanel() {
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             data-placeholder="Ask a question about this page..."
-            className="border-none bg-transparent outline-none text-sm text-gray-200 leading-relaxed min-h-[20px] max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words mb-2.5 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 empty:before:pointer-events-none"
+            className="border-none bg-transparent outline-none text-sm text-stone-800 leading-relaxed min-h-[20px] max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words mb-2.5 empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 empty:before:pointer-events-none"
             suppressContentEditableWarning
           />
 
@@ -441,20 +441,20 @@ function IndexSidepanel() {
           <div className="flex items-center justify-between">
             {/* Left icons */}
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-200 hover:bg-gray-600">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
                 <Plus className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-200 hover:bg-gray-600">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </div>
 
             {/* Right icons */}
             <div className="flex gap-1 items-center">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-200 hover:bg-gray-600">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
                 <Image className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-200 hover:bg-gray-600">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
                 <Mic className="h-4 w-4" />
               </Button>
               <Button
@@ -464,8 +464,8 @@ function IndexSidepanel() {
                 className={cn(
                   "h-8 w-8 rounded-lg ml-1",
                   (inputText.trim() || selectedTabs.length > 0)
-                    ? "bg-blue-500 hover:bg-blue-600"
-                    : "bg-gray-600"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-stone-300"
                 )}
               >
                 <Send className="h-4 w-4 text-white" />
