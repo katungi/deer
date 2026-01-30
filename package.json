@@ -40,7 +40,8 @@
       "https://*/*"
     ],
     "permissions": [
-      "tabs"
+      "tabs",
+      "activeTab"
     ],
     "web_accessible_resources": [
       {

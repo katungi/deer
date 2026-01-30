@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { X, Settings as SettingsIcon, Bell, Shield, Palette } from "lucide-react"
+import { X, Settings as SettingsIcon, Bell, Shield, Palette, Moon } from "lucide-react"
 import { Button } from "./button"
 
 export interface ThemeColor {
@@ -26,9 +26,18 @@ interface SettingsProps {
   onClose: () => void
   selectedColor: string
   onColorChange: (colorId: string) => void
+  darkMode: boolean
+  onDarkModeChange: (enabled: boolean) => void
 }
 
-export function Settings({ isOpen, onClose, selectedColor, onColorChange }: SettingsProps) {
+export function Settings({
+  isOpen,
+  onClose,
+  selectedColor,
+  onColorChange,
+  darkMode,
+  onDarkModeChange
+}: SettingsProps) {
   if (!isOpen) return null
 
   return (
@@ -96,6 +105,22 @@ export function Settings({ isOpen, onClose, selectedColor, onColorChange }: Sett
           {/* Divider */}
           <div className="border-t border-stone-800" />
 
+          {/* Appearance Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-stone-300">
+              <Moon className="h-4 w-4" />
+              <span className="text-sm font-medium">Appearance</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-stone-800/50 rounded-lg">
+              <span className="text-sm text-stone-300">Dark mode</span>
+              <ToggleSwitch
+                checked={darkMode}
+                onChange={onDarkModeChange}
+                themeColor={themeColors.find(c => c.id === selectedColor)?.value}
+              />
+            </div>
+          </div>
+
           {/* Notifications Section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-stone-300">
@@ -141,21 +166,39 @@ export function Settings({ isOpen, onClose, selectedColor, onColorChange }: Sett
   )
 }
 
-function ToggleSwitch({ defaultChecked = false }: { defaultChecked?: boolean }) {
-  const [checked, setChecked] = React.useState(defaultChecked)
+interface ToggleSwitchProps {
+  checked?: boolean
+  defaultChecked?: boolean
+  onChange?: (checked: boolean) => void
+  themeColor?: string
+}
+
+function ToggleSwitch({ checked, defaultChecked = false, onChange, themeColor }: ToggleSwitchProps) {
+  const [internalChecked, setInternalChecked] = React.useState(defaultChecked)
+
+  const isChecked = checked !== undefined ? checked : internalChecked
+
+  const handleClick = () => {
+    const newValue = !isChecked
+    if (onChange) {
+      onChange(newValue)
+    } else {
+      setInternalChecked(newValue)
+    }
+  }
 
   return (
     <button
-      onClick={() => setChecked(!checked)}
-      className={cn(
-        "relative w-11 h-6 rounded-full transition-colors duration-200",
-        checked ? "bg-rose-600" : "bg-stone-600"
-      )}
+      onClick={handleClick}
+      className="relative w-11 h-6 rounded-full transition-colors duration-200"
+      style={{
+        backgroundColor: isChecked ? (themeColor || 'var(--theme-color)') : '#57534e'
+      }}
     >
       <div
         className={cn(
           "absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200",
-          checked ? "translate-x-6" : "translate-x-1"
+          isChecked ? "translate-x-6" : "translate-x-1"
         )}
       />
     </button>

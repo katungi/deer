@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
-import { Plus, MoreHorizontal, Camera, Mic, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Settings as SettingsIcon, Camera, Mic, ChevronDown, ChevronUp } from "lucide-react"
 import "./style.css"
 
 interface Message {
@@ -39,14 +39,52 @@ function NewTabPage() {
   const [tabFilterQuery, setTabFilterQuery] = useState("")
   const [showTabsList, setShowTabsList] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [themeColor, setThemeColor] = useState("rose")
+  const [themeColor, setThemeColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('deer-theme-color') || 'rose'
+    }
+    return 'rose'
+  })
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('deer-dark-mode') === 'true'
+    }
+    return false
+  })
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
+  const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [showPermissionRequest, setShowPermissionRequest] = useState(false)
   const inputRef = useRef<HTMLDivElement>(null)
 
-  // Apply theme color to document
+  // Apply theme color and dark mode to document
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeColor)
+    localStorage.setItem('deer-theme-color', themeColor)
   }, [themeColor])
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    localStorage.setItem('deer-dark-mode', String(darkMode))
+  }, [darkMode])
+
+  // Listen for storage changes from other pages (sidepanel, etc.)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'deer-theme-color' && e.newValue) {
+        setThemeColor(e.newValue)
+      }
+      if (e.key === 'deer-dark-mode') {
+        setDarkMode(e.newValue === 'true')
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
 
   useEffect(() => {
     const fetchTabs = async () => {
@@ -77,6 +115,10 @@ function NewTabPage() {
 
   const captureTabScreenshot = async () => {
     try {
+      // Clear any previous permission error
+      setPermissionError(null)
+      setShowPermissionRequest(false)
+
       // Get the active tab or use the first selected tab
       const targetTab = selectedTabs.length > 0
         ? selectedTabs[0]
@@ -97,9 +139,42 @@ function NewTabPage() {
       }
 
       setAttachedImages(prev => [...prev, newImage])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to capture screenshot:', error)
+      if (error.message?.includes('permission') || error.message?.includes('activeTab')) {
+        setPermissionError('Screenshot permission required.')
+        setShowPermissionRequest(true)
+      } else {
+        setPermissionError('Failed to capture screenshot. Make sure you have an active tab.')
+        setShowPermissionRequest(false)
+      }
     }
+  }
+
+  const requestScreenshotPermission = async () => {
+    try {
+      // Request the activeTab permission
+      const granted = await chrome.permissions.request({
+        permissions: ['activeTab']
+      })
+
+      if (granted) {
+        setPermissionError(null)
+        setShowPermissionRequest(false)
+        // Try capturing again after permission granted
+        captureTabScreenshot()
+      } else {
+        setPermissionError('Permission denied. Please enable in extension settings.')
+      }
+    } catch (error) {
+      console.error('Permission request failed:', error)
+      setPermissionError('Could not request permission. Please check extension settings.')
+    }
+  }
+
+  const dismissPermissionError = () => {
+    setPermissionError(null)
+    setShowPermissionRequest(false)
   }
 
   const removeAttachedImage = (imageId: string) => {
@@ -204,7 +279,7 @@ function NewTabPage() {
     const lastAtIndex = content.lastIndexOf('@')
 
     if (lastAtIndex !== -1) {
-      const chipHtml = `<span contenteditable="false" data-tab-id="${tab.id}" data-tab-title="${tab.title}" class="inline-flex items-center gap-1 bg-rose-100 border border-rose-200 rounded-md px-2 py-0.5 mx-0.5 text-xs text-rose-800 font-medium align-middle select-none">${tab.title}<button onclick="this.parentElement.remove(); window.dispatchEvent(new CustomEvent('tabChipRemoved', {detail: ${tab.id}}))" class="bg-transparent border-none cursor-pointer p-0 pl-1 text-rose-500 text-sm leading-none">×</button></span>&nbsp;`
+      const chipHtml = `<span contenteditable="false" data-tab-id="${tab.id}" data-tab-title="${tab.title}" class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 mx-0.5 text-xs font-medium align-middle select-none" style="background-color: var(--theme-color-light); border: 1px solid var(--theme-color); color: var(--theme-color);">${tab.title}<button onclick="this.parentElement.remove(); window.dispatchEvent(new CustomEvent('tabChipRemoved', {detail: ${tab.id}}))" class="bg-transparent border-none cursor-pointer p-0 pl-1 text-sm leading-none" style="color: var(--theme-color);">×</button></span>&nbsp;`
 
       inputRef.current.innerHTML = content.substring(0, lastAtIndex) + chipHtml + content.substring(lastAtIndex + 1 + tabFilterQuery.length)
 
@@ -225,7 +300,7 @@ function NewTabPage() {
       setSelectedTabs(prev => [...prev, tab])
       // Prefill the input with the tab title
       if (inputRef.current) {
-        const chipHtml = `<span contenteditable="false" data-tab-id="${tab.id}" data-tab-title="${tab.title}" class="inline-flex items-center gap-1 bg-rose-100 border border-rose-200 rounded-md px-2 py-0.5 mx-0.5 text-xs text-rose-800 font-medium align-middle select-none">${tab.title}<button onclick="this.parentElement.remove(); window.dispatchEvent(new CustomEvent('tabChipRemoved', {detail: ${tab.id}}))" class="bg-transparent border-none cursor-pointer p-0 pl-1 text-rose-500 text-sm leading-none">×</button></span>&nbsp;`
+        const chipHtml = `<span contenteditable="false" data-tab-id="${tab.id}" data-tab-title="${tab.title}" class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 mx-0.5 text-xs font-medium align-middle select-none" style="background-color: var(--theme-color-light); border: 1px solid var(--theme-color); color: var(--theme-color);">${tab.title}<button onclick="this.parentElement.remove(); window.dispatchEvent(new CustomEvent('tabChipRemoved', {detail: ${tab.id}}))" class="bg-transparent border-none cursor-pointer p-0 pl-1 text-sm leading-none" style="color: var(--theme-color);">×</button></span>&nbsp;`
         inputRef.current.innerHTML += chipHtml
         // Move cursor to end
         const range = document.createRange()
@@ -288,11 +363,11 @@ function NewTabPage() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 font-sans flex flex-col">
+    <div className="min-h-screen bg-stone-50 dark:bg-stone-900 font-sans flex flex-col transition-colors duration-200">
       {messages.length === 0 ? (
         /* Initial State - Centered Card */
         <div className="flex-1 flex flex-col items-center justify-center px-5 py-10 max-w-[600px] mx-auto w-full">
-          <div className="w-full relative bg-white rounded-3xl border border-stone-200 shadow-lg overflow-hidden">
+          <div className="w-full relative bg-white dark:bg-stone-800 rounded-3xl border border-stone-200 dark:border-stone-700 shadow-lg overflow-hidden transition-colors">
             {/* Input Section */}
             <div className="flex flex-col p-4 px-5">
               {/* Selected Tabs */}
@@ -301,22 +376,22 @@ function NewTabPage() {
                   {selectedTabs.map((tab) => (
                     <div
                       key={tab.id}
-                      className="flex items-center gap-1.5 bg-rose-100 border border-rose-200 rounded-lg px-2.5 py-1.5 text-xs max-w-[180px]"
+                      className="flex items-center gap-1.5 bg-theme-light border border-theme rounded-lg px-2.5 py-1.5 text-xs max-w-[180px]"
                     >
                       <img
-                        src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23fda4af"/></svg>'}
+                        src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'}
                         alt=""
                         className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
                         onError={(e) => {
-                          e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23fda4af"/></svg>'
+                          e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'
                         }}
                       />
-                      <span className="truncate text-rose-800 font-medium text-xs">
+                      <span className="truncate text-theme font-medium text-xs">
                         {tab.title}
                       </span>
                       <button
                         onClick={() => tab.id && removeSelectedTab(tab.id)}
-                        className="bg-transparent border-none cursor-pointer p-0 text-rose-500 text-sm leading-none flex-shrink-0 hover:text-rose-700"
+                        className="bg-transparent border-none cursor-pointer p-0 text-theme text-sm leading-none flex-shrink-0 hover:opacity-70"
                       >
                         ×
                       </button>
@@ -353,23 +428,23 @@ function NewTabPage() {
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
                 data-placeholder="Search, ask, or @-mention a tab"
-                className="border-none bg-transparent outline-none text-base text-stone-800 leading-relaxed min-h-[24px] max-h-[120px] overflow-y-auto whitespace-pre-wrap break-words empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 empty:before:pointer-events-none"
+                className="border-none bg-transparent outline-none text-base text-stone-800 dark:text-stone-100 leading-relaxed min-h-[24px] max-h-[120px] overflow-y-auto whitespace-pre-wrap break-words empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-500 empty:before:pointer-events-none"
                 suppressContentEditableWarning
               />
 
               {/* Bottom Toolbar */}
               <div className="flex items-center justify-between mt-3">
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700">
                     <Plus className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setShowSettings(true)}
-                    className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                    className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700"
                   >
-                    <MoreHorizontal className="h-4 w-4" />
+                    <SettingsIcon className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="flex gap-1 items-center">
@@ -377,11 +452,11 @@ function NewTabPage() {
                     variant="ghost"
                     size="icon"
                     onClick={captureTabScreenshot}
-                    className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                    className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700"
                   >
                     <Camera className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700">
                     <Mic className="h-4 w-4" />
                   </Button>
                   <Button
@@ -402,12 +477,12 @@ function NewTabPage() {
             </div>
 
             {/* Expandable Tabs List */}
-            <div className="border-t border-stone-100">
+            <div className="border-t border-stone-100 dark:border-stone-700">
               <button
                 onClick={() => setShowTabsList(!showTabsList)}
-                className="w-full flex items-center justify-between px-5 py-3 hover:bg-stone-50 transition-colors"
+                className="w-full flex items-center justify-between px-5 py-3 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors"
               >
-                <span className="text-sm text-stone-600 font-medium">
+                <span className="text-sm text-stone-600 dark:text-stone-300 font-medium">
                   Your Tabs ({allTabs.length})
                 </span>
                 {showTabsList ? (
@@ -434,8 +509,8 @@ function NewTabPage() {
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
                           isSelected
-                            ? "bg-rose-100 border border-rose-200"
-                            : "hover:bg-stone-100"
+                            ? "bg-theme-light border border-theme"
+                            : "hover:bg-stone-100 dark:hover:bg-stone-700"
                         )}
                       >
                         <img
@@ -449,19 +524,19 @@ function NewTabPage() {
                         <div className="flex-1 min-w-0">
                           <div className={cn(
                             "text-sm truncate font-medium",
-                            isSelected ? "text-rose-800" : "text-stone-700"
+                            isSelected ? "text-theme" : "text-stone-700 dark:text-stone-300"
                           )}>
                             {tab.title}
                           </div>
                           <div className={cn(
                             "text-xs truncate",
-                            isSelected ? "text-rose-600" : "text-stone-500"
+                            isSelected ? "text-theme" : "text-stone-500 dark:text-stone-400"
                           )}>
                             {tab.url ? new URL(tab.url).hostname : ""}
                           </div>
                         </div>
                         {isSelected && (
-                          <div className="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center flex-shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-theme flex items-center justify-center flex-shrink-0">
                             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </svg>
@@ -517,7 +592,7 @@ function NewTabPage() {
       ) : (
         /* Chat State - Messages with Input at Bottom */
         <div className="flex-1 flex flex-col max-w-[800px] mx-auto w-full px-5 py-10 relative">
-          <ScrollArea className="flex-1 pb-5 bg-white rounded-2xl mb-4">
+          <ScrollArea className="flex-1 pb-5 bg-white dark:bg-stone-800 rounded-2xl mb-4 transition-colors">
             <div className="p-5 space-y-4">
               {messages.map((message) => (
                 <div
@@ -565,7 +640,7 @@ function NewTabPage() {
                         "max-w-[70%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
                         message.isUser
                           ? "bg-theme text-white"
-                          : "bg-stone-100 text-stone-800"
+                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100"
                       )}
                     >
                       {message.text}
@@ -577,29 +652,29 @@ function NewTabPage() {
           </ScrollArea>
 
           {/* Input at Bottom - Animated in */}
-          <div className="animate-in slide-in-from-bottom-4 duration-300 bg-white rounded-2xl border border-stone-200 shadow-sm p-3">
+          <div className="animate-in slide-in-from-bottom-4 duration-300 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm p-3 transition-colors">
             {/* Selected Tabs */}
             {selectedTabs.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2.5">
                 {selectedTabs.map((tab) => (
                   <div
                     key={tab.id}
-                    className="flex items-center gap-1.5 bg-rose-100 border border-rose-200 rounded-lg px-2.5 py-1.5 text-xs max-w-[150px]"
+                    className="flex items-center gap-1.5 bg-theme-light border border-theme rounded-lg px-2.5 py-1.5 text-xs max-w-[150px]"
                   >
                     <img
-                      src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23fda4af"/></svg>'}
+                      src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'}
                       alt=""
                       className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
                       onError={(e) => {
-                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23fda4af"/></svg>'
+                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'
                       }}
                     />
-                    <span className="truncate text-rose-800 font-medium text-xs">
+                    <span className="truncate text-theme font-medium text-xs">
                       {tab.title}
                     </span>
                     <button
                       onClick={() => tab.id && removeSelectedTab(tab.id)}
-                      className="bg-transparent border-none cursor-pointer p-0 text-rose-500 text-sm leading-none flex-shrink-0 hover:text-rose-700"
+                      className="bg-transparent border-none cursor-pointer p-0 text-theme text-sm leading-none flex-shrink-0 hover:opacity-70"
                     >
                       ×
                     </button>
@@ -622,16 +697,16 @@ function NewTabPage() {
             {/* Bottom toolbar */}
             <div className="flex items-center justify-between">
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700">
                   <Plus className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowSettings(true)}
-                  className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                  className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700"
                 >
-                  <MoreHorizontal className="h-4 w-4" />
+                  <SettingsIcon className="h-4 w-4" />
                 </Button>
               </div>
               <div className="flex gap-1 items-center">
@@ -639,11 +714,11 @@ function NewTabPage() {
                   variant="ghost"
                   size="icon"
                   onClick={captureTabScreenshot}
-                  className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                  className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700"
                 >
                   <Camera className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700">
                   <Mic className="h-4 w-4" />
                 </Button>
                 <Button
@@ -704,12 +779,37 @@ function NewTabPage() {
         </div>
       )}
 
+      {/* Permission Error Toast */}
+      {permissionError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4">
+          <div className="bg-stone-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 max-w-md">
+            <div className="flex-1 text-sm">{permissionError}</div>
+            {showPermissionRequest && (
+              <button
+                onClick={requestScreenshotPermission}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-theme hover:bg-theme-dark text-white transition-colors"
+              >
+                Grant
+              </button>
+            )}
+            <button
+              onClick={dismissPermissionError}
+              className="text-stone-400 hover:text-white text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Settings Modal */}
       <Settings
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         selectedColor={themeColor}
         onColorChange={setThemeColor}
+        darkMode={darkMode}
+        onDarkModeChange={setDarkMode}
       />
     </div>
   )
