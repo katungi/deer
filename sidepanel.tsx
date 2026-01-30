@@ -1,10 +1,20 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
+import { History } from "@/components/ui/history"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
-import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search } from "lucide-react"
+import {
+  useChat,
+  hasAPIKey,
+  getConversations,
+  saveConversation,
+  deleteConversation,
+  createConversation,
+  type Conversation,
+} from "@/lib/ai"
+import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon } from "lucide-react"
 import "./style.css"
 
 interface Message {
@@ -13,6 +23,7 @@ interface Message {
   isUser: boolean
   timestamp: Date
   tabs?: Tab[]
+  isStreaming?: boolean
 }
 
 interface Tab {
@@ -44,6 +55,103 @@ function IndexSidepanel() {
   const [dropdownPosition, setDropdownPosition] = useState(0)
   const [selectedFunction, setSelectedFunction] = useState<ChatFunction | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
+
+  // AI Chat hook
+  const {
+    messages: aiMessages,
+    isLoading: isAiLoading,
+    sendMessage: sendAiMessage,
+    stopAgent,
+  } = useChat({
+    onError: (error) => {
+      setChatError(error.message)
+      setTimeout(() => setChatError(null), 5000)
+    },
+  })
+
+  // Check API key on mount and when settings close
+  useEffect(() => {
+    setApiKeyConfigured(hasAPIKey())
+  }, [showSettings])
+
+  // Load conversations on mount
+  useEffect(() => {
+    getConversations().then((convs) => {
+      setConversations(convs)
+      // Start with a new conversation if none exists
+      if (convs.length === 0) {
+        const newConv = createConversation()
+        setCurrentConversation(newConv)
+      }
+    })
+  }, [])
+
+  // Save current conversation when messages change
+  useEffect(() => {
+    if (currentConversation && messages.length > 0) {
+      const updatedConv: Conversation = {
+        ...currentConversation,
+        messages: messages.map((m) => ({
+          id: m.id,
+          role: m.isUser ? 'user' as const : 'assistant' as const,
+          content: m.text,
+          timestamp: m.timestamp,
+        })),
+        updatedAt: new Date(),
+        title: currentConversation.title === 'New Chat' && messages[0]?.text
+          ? messages[0].text.slice(0, 50) + (messages[0].text.length > 50 ? '...' : '')
+          : currentConversation.title,
+      }
+      saveConversation(updatedConv).then(() => {
+        setCurrentConversation(updatedConv)
+        // Refresh conversations list
+        getConversations().then(setConversations)
+      })
+    }
+  }, [messages])
+
+  // Conversation handlers
+  const handleNewConversation = useCallback(() => {
+    const newConv = createConversation()
+    setCurrentConversation(newConv)
+    setMessages([])
+  }, [])
+
+  const handleSelectConversation = useCallback((id: string) => {
+    const conv = conversations.find((c) => c.id === id)
+    if (conv) {
+      setCurrentConversation(conv)
+      // Convert stored messages to UI format
+      setMessages(
+        conv.messages.map((m) => ({
+          id: m.id,
+          text: m.content,
+          isUser: m.role === 'user',
+          timestamp: new Date(m.timestamp),
+        }))
+      )
+    }
+  }, [conversations])
+
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    await deleteConversation(id)
+    const updatedConvs = await getConversations()
+    setConversations(updatedConvs)
+
+    // If we deleted the current conversation, start a new one
+    if (currentConversation?.id === id) {
+      if (updatedConvs.length > 0) {
+        handleSelectConversation(updatedConvs[0].id)
+      } else {
+        handleNewConversation()
+      }
+    }
+  }, [currentConversation, handleSelectConversation, handleNewConversation])
   const [themeColor, setThemeColor] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('deer-theme-color') || 'rose'
@@ -212,9 +320,16 @@ function IndexSidepanel() {
     setAttachedImages(prev => prev.filter(img => img.id !== imageId))
   }
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const messageText = getPlainText().trim()
     if (!messageText && selectedTabs.length === 0 && !selectedFunction && attachedImages.length === 0) return
+
+    // Check if API key is configured
+    if (!apiKeyConfigured) {
+      setChatError('Please configure your API key in Settings first')
+      setShowSettings(true)
+      return
+    }
 
     // Build the full message with function prefix if selected
     const fullText = selectedFunction
@@ -230,6 +345,20 @@ function IndexSidepanel() {
     }
 
     setMessages(prev => [...prev, newMessage])
+
+    // Add a placeholder for AI response
+    const aiMessageId = (Date.now() + 1).toString()
+    setMessages(prev => [...prev, {
+      id: aiMessageId,
+      text: '',
+      isUser: false,
+      timestamp: new Date(),
+      isStreaming: true
+    }])
+
+    const currentTabs = [...selectedTabs]
+    const currentFunction = selectedFunction?.name
+
     setInputText("")
     setSelectedTabs([])
     setSelectedFunction(null)
@@ -239,15 +368,30 @@ function IndexSidepanel() {
       inputRef.current.innerHTML = ""
     }
 
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: "I'm analyzing the selected tabs and their content. Based on what I can see, I'll help you with your request.",
-        isUser: false,
-        timestamp: new Date()
+    try {
+      // Send to AI
+      await sendAiMessage(fullText, {
+        tabs: currentTabs.length > 0 ? currentTabs : undefined,
+        selectedFunction: currentFunction,
+      })
+
+      // Update the AI message with the response from aiMessages
+      const lastAiMessage = aiMessages[aiMessages.length - 1]
+      if (lastAiMessage && lastAiMessage.role === 'assistant') {
+        setMessages(prev => prev.map(m =>
+          m.id === aiMessageId
+            ? { ...m, text: lastAiMessage.content, isStreaming: false }
+            : m
+        ))
       }
-      setMessages(prev => [...prev, aiResponse])
-    }, 1000)
+    } catch (error) {
+      // Update with error message
+      setMessages(prev => prev.map(m =>
+        m.id === aiMessageId
+          ? { ...m, text: 'Sorry, something went wrong. Please try again.', isStreaming: false }
+          : m
+      ))
+    }
   }
 
   const handlePromptClick = (prompt: string) => {
@@ -464,7 +608,7 @@ function IndexSidepanel() {
                     </div>
                   )}
                   {/* Message text bubble */}
-                  {message.text && (
+                  {(message.text || message.isStreaming) && (
                     <div
                       className={cn(
                         "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
@@ -473,7 +617,11 @@ function IndexSidepanel() {
                           : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100"
                       )}
                     >
-                      {message.text}
+                      {message.text || (message.isStreaming && (
+                        <span className="flex items-center gap-2">
+                          <span className="animate-pulse">Thinking...</span>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -623,14 +771,30 @@ function IndexSidepanel() {
           <div className="flex items-center justify-between">
             {/* Left icons */}
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleNewConversation}
+                className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700"
+                title="New chat"
+              >
                 <Plus className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowHistory(true)}
+                className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700"
+                title="Chat history"
+              >
+                <HistoryIcon className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowSettings(true)}
                 className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700"
+                title="Settings"
               >
                 <SettingsIcon className="h-4 w-4" />
               </Button>
@@ -649,19 +813,30 @@ function IndexSidepanel() {
               <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700">
                 <Mic className="h-4 w-4" />
               </Button>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!inputText.trim() && selectedTabs.length === 0 && !selectedFunction && attachedImages.length === 0}
-                size="icon"
-                className={cn(
-                  "h-8 w-8 rounded-lg ml-1",
-                  (inputText.trim() || selectedTabs.length > 0 || selectedFunction || attachedImages.length > 0)
-                    ? "bg-theme hover:bg-theme-dark"
-                    : "bg-stone-300"
-                )}
-              >
-                <SendIcon className="h-4 w-4 text-white" />
-              </Button>
+              {isAiLoading ? (
+                <Button
+                  onClick={stopAgent}
+                  size="icon"
+                  className="h-8 w-8 rounded-lg ml-1 bg-red-500 hover:bg-red-600"
+                  title="Stop generating"
+                >
+                  <Square className="h-3 w-3 text-white fill-white" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!inputText.trim() && selectedTabs.length === 0 && !selectedFunction && attachedImages.length === 0}
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-lg ml-1",
+                    (inputText.trim() || selectedTabs.length > 0 || selectedFunction || attachedImages.length > 0)
+                      ? "bg-theme hover:bg-theme-dark"
+                      : "bg-stone-300"
+                  )}
+                >
+                  <SendIcon className="h-4 w-4 text-white" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -690,6 +865,22 @@ function IndexSidepanel() {
         </div>
       )}
 
+      {/* Chat Error Toast */}
+      {chatError && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4">
+          <div className="bg-red-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 max-w-[300px]">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <div className="flex-1 text-xs">{chatError}</div>
+            <button
+              onClick={() => setChatError(null)}
+              className="text-red-300 hover:text-white text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Settings Modal */}
       <Settings
         isOpen={showSettings}
@@ -700,6 +891,17 @@ function IndexSidepanel() {
         onDarkModeChange={setDarkMode}
         searchEngine={searchEngine}
         onSearchEngineChange={setSearchEngine}
+      />
+
+      {/* History Panel */}
+      <History
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        conversations={conversations}
+        currentConversationId={currentConversation?.id || null}
+        onSelectConversation={handleSelectConversation}
+        onNewConversation={handleNewConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
     </div>
   )

@@ -10,9 +10,13 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.31",
+    "@ai-sdk/groq": "^3.0.19",
+    "@ai-sdk/openai": "^3.0.23",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-slot": "^1.2.4",
+    "ai": "^6.0.62",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",
@@ -20,7 +24,8 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-icons": "^5.5.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
@@ -41,7 +46,9 @@
     ],
     "permissions": [
       "tabs",
-      "activeTab"
+      "activeTab",
+      "scripting",
+      "storage"
     ],
     "web_accessible_resources": [
       {

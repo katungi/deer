@@ -1,8 +1,9 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { X, Settings as SettingsIcon, Bell, Shield, Palette, Moon, Search, Camera, Lock, CheckCircle2, AlertCircle } from "lucide-react"
+import { X, Settings as SettingsIcon, Bell, Shield, Palette, Moon, Search, Camera, Lock, CheckCircle2, AlertCircle, Bot, Key, Eye, EyeOff } from "lucide-react"
 import { Button } from "./button"
 import { searchEngines } from "@/lib/inputDetection"
+import { getAIConfig, saveAIConfig, type AIConfig, type AIProvider, getAvailableModels } from "@/lib/ai"
 
 interface PermissionStatus {
   activeTab: boolean
@@ -53,6 +54,12 @@ export const themeColors: ThemeColor[] = [
   { id: "red-orange", name: "Red Orange", value: "#dc2626", class: "bg-red-600" },
 ]
 
+const AI_PROVIDERS: { id: AIProvider; name: string; description: string }[] = [
+  { id: 'anthropic', name: 'Anthropic', description: 'Claude models' },
+  { id: 'openai', name: 'OpenAI', description: 'GPT models' },
+  { id: 'groq', name: 'Groq', description: 'Fast inference' },
+]
+
 interface SettingsProps {
   isOpen: boolean
   onClose: () => void
@@ -77,10 +84,27 @@ export function Settings({
   const [permissions, setPermissions] = React.useState<PermissionStatus>({ activeTab: false, tabs: false })
   const [requestingPermission, setRequestingPermission] = React.useState<string | null>(null)
 
-  // Check permissions when settings open
+  // AI Configuration state
+  const [aiProvider, setAiProvider] = React.useState<AIProvider>('anthropic')
+  const [apiKey, setApiKey] = React.useState('')
+  const [selectedModel, setSelectedModel] = React.useState('')
+  const [showApiKey, setShowApiKey] = React.useState(false)
+  const [aiConfigSaved, setAiConfigSaved] = React.useState(false)
+
+  // Check permissions and load AI config when settings open
   React.useEffect(() => {
     if (isOpen) {
       checkPermissions().then(setPermissions)
+
+      // Load AI config
+      getAIConfig().then((config) => {
+        if (config) {
+          setAiProvider(config.provider)
+          setApiKey(config.apiKey)
+          setSelectedModel(config.model || '')
+          setAiConfigSaved(true)
+        }
+      })
     }
   }, [isOpen])
 
@@ -92,6 +116,26 @@ export function Settings({
     }
     setRequestingPermission(null)
   }
+
+  const handleSaveAIConfig = async () => {
+    if (!apiKey.trim()) return
+
+    const config: AIConfig = {
+      provider: aiProvider,
+      apiKey: apiKey.trim(),
+      model: selectedModel || undefined,
+    }
+    await saveAIConfig(config)
+    setAiConfigSaved(true)
+  }
+
+  const handleProviderChange = (provider: AIProvider) => {
+    setAiProvider(provider)
+    setSelectedModel('') // Reset model when provider changes
+    setAiConfigSaved(false)
+  }
+
+  const availableModels = getAvailableModels(aiProvider)
 
   if (!isOpen) return null
 
@@ -155,6 +199,116 @@ export function Settings({
                 />
               ))}
             </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-stone-800" />
+
+          {/* AI Configuration Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-stone-300">
+              <Bot className="h-4 w-4" />
+              <span className="text-sm font-medium">AI Configuration</span>
+            </div>
+
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <span className="text-xs text-stone-400">Provider</span>
+              <div className="flex gap-2">
+                {AI_PROVIDERS.map((provider) => (
+                  <button
+                    key={provider.id}
+                    onClick={() => handleProviderChange(provider.id)}
+                    className={cn(
+                      "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+                      aiProvider === provider.id
+                        ? "text-white"
+                        : "bg-stone-700 text-stone-300 hover:bg-stone-600"
+                    )}
+                    style={aiProvider === provider.id ? {
+                      backgroundColor: themeColors.find(c => c.id === selectedColor)?.value || 'var(--theme-color)'
+                    } : undefined}
+                  >
+                    <div className="font-medium">{provider.name}</div>
+                    <div className="text-[10px] opacity-70">{provider.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key Input */}
+            <div className="space-y-2">
+              <span className="text-xs text-stone-400">API Key</span>
+              <div className="relative">
+                <div className="flex items-center gap-2">
+                  <Key className="h-4 w-4 text-stone-500 absolute left-3" />
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => {
+                      setApiKey(e.target.value)
+                      setAiConfigSaved(false)
+                    }}
+                    placeholder={`Enter your ${aiProvider === 'anthropic' ? 'Anthropic' : aiProvider === 'openai' ? 'OpenAI' : 'Groq'} API key`}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-9 py-2 text-sm text-stone-200 placeholder-stone-500 focus:outline-none focus:border-stone-600"
+                  />
+                  <button
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 text-stone-500 hover:text-stone-300"
+                  >
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Model Selection */}
+            <div className="space-y-2">
+              <span className="text-xs text-stone-400">Model</span>
+              <select
+                value={selectedModel}
+                onChange={(e) => {
+                  setSelectedModel(e.target.value)
+                  setAiConfigSaved(false)
+                }}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 focus:outline-none focus:border-stone-600"
+              >
+                <option value="">Default</option>
+                {availableModels.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Save Button */}
+            <button
+              onClick={handleSaveAIConfig}
+              disabled={!apiKey.trim() || aiConfigSaved}
+              className={cn(
+                "w-full py-2 rounded-lg text-sm font-medium transition-all",
+                apiKey.trim() && !aiConfigSaved
+                  ? "text-white hover:opacity-90"
+                  : "bg-stone-700 text-stone-500 cursor-not-allowed"
+              )}
+              style={apiKey.trim() && !aiConfigSaved ? {
+                backgroundColor: themeColors.find(c => c.id === selectedColor)?.value || 'var(--theme-color)'
+              } : undefined}
+            >
+              {aiConfigSaved ? (
+                <span className="flex items-center justify-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Saved
+                </span>
+              ) : (
+                'Save API Key'
+              )}
+            </button>
+
+            <p className="text-xs text-stone-500">
+              Your API key is stored locally and never sent to our servers.
+            </p>
           </div>
 
           {/* Divider */}
