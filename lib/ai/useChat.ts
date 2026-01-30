@@ -1,9 +1,13 @@
 import { useState, useCallback, useRef } from 'react'
 import type { ModelMessage } from 'ai'
+import { generateText } from 'ai'
 import { BrowserAgent } from './agent'
+import { createProvider } from './provider'
 import { showAgentGlow, hideAgentGlow } from './glow'
 import { getAIConfig, hasAPIKey } from './storage'
 import type { AgentState, AgentStep } from './types'
+
+const CHAT_SYSTEM_PROMPT = `You are Deer, a friendly and helpful browser assistant. You help users with questions, explanations, and general conversation. Be concise, clear, and helpful.`
 
 export interface ChatMessage {
   id: string
@@ -22,6 +26,7 @@ export interface ChatBrowserContext {
   tabs?: chrome.tabs.Tab[]
   screenshots?: string[]
   selectedFunction?: string
+  agentMode?: boolean
 }
 
 export interface UseChatReturn {
@@ -86,54 +91,75 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
     setIsLoading(true)
 
-    // Show glow effect on the active tab
-    showAgentGlow({ pulse: true })
+    // Build messages for the model
+    const modelMessages: ModelMessage[] = messages
+      .filter(m => m.content) // Filter out empty messages
+      .map(m => ({
+        role: m.role,
+        content: m.content,
+      }))
+    modelMessages.push({ role: 'user', content: fullContent })
+
+    // Show glow effect only in agent mode
+    if (context?.agentMode) {
+      showAgentGlow({ pulse: true })
+    }
 
     try {
-      // Create and run agent
-      const agent = new BrowserAgent(config, {
-        onText: (text) => {
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantMessageId
-                ? { ...m, content: m.content + text }
-                : m
+      if (context?.agentMode) {
+        // Agent mode: use tools to perform actions
+        const agent = new BrowserAgent(config, {
+          onText: (text) => {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, content: m.content + text }
+                  : m
+              )
             )
-          )
-        },
-        onStep: (step) => {
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantMessageId
-                ? { ...m, agentSteps: [...(m.agentSteps || []), step] }
-                : m
+          },
+          onStep: (step) => {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, agentSteps: [...(m.agentSteps || []), step] }
+                  : m
+              )
             )
+          },
+          onStateChange: setAgentState,
+        })
+
+        agentRef.current = agent
+
+        const response = await agent.run(modelMessages)
+
+        // Finalize the message
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessageId
+              ? { ...m, content: response || m.content, isStreaming: false }
+              : m
           )
-        },
-        onStateChange: setAgentState,
-      })
-
-      agentRef.current = agent
-
-      // Build messages for the agent
-      const modelMessages: ModelMessage[] = messages
-        .filter(m => m.content) // Filter out empty messages
-        .map(m => ({
-          role: m.role,
-          content: m.content,
-        }))
-      modelMessages.push({ role: 'user', content: fullContent })
-
-      const response = await agent.run(modelMessages)
-
-      // Finalize the message
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantMessageId
-            ? { ...m, content: response || m.content, isStreaming: false }
-            : m
         )
-      )
+      } else {
+        // Chat mode: simple conversation without tools
+        const model = createProvider(config)
+
+        const result = await generateText({
+          model,
+          system: CHAT_SYSTEM_PROMPT,
+          messages: modelMessages,
+        })
+
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessageId
+              ? { ...m, content: result.text, isStreaming: false }
+              : m
+          )
+        )
+      }
     } catch (error) {
       console.error('Chat error:', error)
       const errorMessage = error instanceof Error ? error.message : 'An error occurred'

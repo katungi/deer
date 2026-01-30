@@ -14,7 +14,7 @@ import {
   createConversation,
   type Conversation,
 } from "@/lib/ai"
-import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon } from "lucide-react"
+import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon, Zap } from "lucide-react"
 import "./style.css"
 
 interface Message {
@@ -173,6 +173,12 @@ function IndexSidepanel() {
     }
     return 'google'
   })
+  const [agentMode, setAgentMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('deer-agent-mode') === 'true'
+    }
+    return false
+  })
   const inputRef = useRef<HTMLDivElement>(null)
 
   const availableFunctions: ChatFunction[] = [
@@ -201,6 +207,11 @@ function IndexSidepanel() {
     localStorage.setItem('deer-search-engine', searchEngine)
   }, [searchEngine])
 
+  // Persist agent mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('deer-agent-mode', String(agentMode))
+  }, [agentMode])
+
   // Listen for storage changes from other pages (newtab, etc.)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -212,6 +223,9 @@ function IndexSidepanel() {
       }
       if (e.key === 'deer-search-engine' && e.newValue) {
         setSearchEngine(e.newValue)
+      }
+      if (e.key === 'deer-agent-mode') {
+        setAgentMode(e.newValue === 'true')
       }
     }
 
@@ -373,6 +387,7 @@ function IndexSidepanel() {
       await sendAiMessage(fullText, {
         tabs: currentTabs.length > 0 ? currentTabs : undefined,
         selectedFunction: currentFunction,
+        agentMode,
       })
 
       // Update the AI message with the response from aiMessages
@@ -665,7 +680,26 @@ function IndexSidepanel() {
       {/* Input Area */}
       <div className="p-3 pb-4 bg-white dark:bg-stone-900 transition-colors">
         {/* Quick action chips */}
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-2 mb-3 items-center">
+          {/* Agent Mode Toggle */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAgentMode(!agentMode)}
+            className={cn(
+              "rounded-full text-xs gap-1.5 transition-all",
+              agentMode
+                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-400 dark:border-amber-600 hover:opacity-80"
+                : "bg-stone-100 dark:bg-stone-700 hover:bg-stone-200 dark:hover:bg-stone-600 text-stone-700 dark:text-stone-300"
+            )}
+            title={agentMode ? "Agent mode ON - I can perform actions" : "Agent mode OFF - Chat only"}
+          >
+            <Zap className={cn("h-3.5 w-3.5", agentMode && "fill-amber-500")} />
+            Agent
+          </Button>
+
+          <div className="w-px h-4 bg-stone-200 dark:bg-stone-600" />
+
           {availableFunctions.map((func) => (
             <Button
               key={func.id}
@@ -762,7 +796,7 @@ function IndexSidepanel() {
             contentEditable
             onInput={handleInput}
             onKeyDown={handleKeyDown}
-            data-placeholder={selectedFunction ? `What would you like to ${selectedFunction.name.toLowerCase()}?` : "Ask a question about this page..."}
+            data-placeholder={selectedFunction ? `What would you like to ${selectedFunction.name.toLowerCase()}?` : agentMode ? "What would you like me to do?" : "Ask me anything..."}
             className="border-none bg-transparent outline-none text-sm text-stone-800 dark:text-stone-100 leading-relaxed min-h-[20px] max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words mb-2.5 empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-500 empty:before:pointer-events-none"
             suppressContentEditableWarning
           />

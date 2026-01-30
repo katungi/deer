@@ -10,13 +10,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.31
-        version: 3.0.31(zod@4.3.6)
+        version: 3.0.31(zod@3.25.76)
       '@ai-sdk/groq':
         specifier: ^3.0.19
-        version: 3.0.19(zod@4.3.6)
+        version: 3.0.19(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^3.0.23
-        version: 3.0.23(zod@4.3.6)
+        version: 3.0.23(zod@3.25.76)
       '@radix-ui/react-avatar':
         specifier: ^1.1.11
         version: 1.1.11(@types/react-dom@18.2.18)(@types/react@18.2.48)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
@@ -28,7 +28,7 @@ importers:
         version: 1.2.4(@types/react@18.2.48)(react@18.2.0)
       ai:
         specifier: ^6.0.62
-        version: 6.0.62(zod@4.3.6)
+        version: 6.0.62(zod@3.25.76)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -54,8 +54,8 @@ importers:
         specifier: ^3.4.0
         version: 3.4.0
       zod:
-        specifier: ^4.3.6
-        version: 4.3.6
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@ianvs/prettier-plugin-sort-imports':
         specifier: 4.1.1
@@ -1963,9 +1963,6 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
-  caniuse-lite@1.0.30001720:
-    resolution: {integrity: sha512-Ec/2yV2nNPwb4DnTANEV99ZWwm3ZWfdlfkQbWSDDt+PsXEVYwlhPH8tdMaPunYTKKmz7AnHi2oNEi1GcmKCD8g==}
-
   caniuse-lite@1.0.30001766:
     resolution: {integrity: sha512-4C0lfJ0/YPjJQHagaE9x2Elb69CIqEPZeG0anQt9SIvIoOH4a4uaRl73IavyO+0qZh6MDLH//DrXThEYKHkmYA==}
 
@@ -3443,42 +3440,42 @@ packages:
     resolution: {integrity: sha512-cYVsTjKl8b+FrnidjibDWskAv7UKOfcwaVZdp/it9n1s9fU3IkgDbhdIRKCW4JDsAlECJY0ytoVPT3sK6kideA==}
     engines: {node: '>=18'}
 
-  zod@4.3.6:
-    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
 
-  '@ai-sdk/anthropic@3.0.31(zod@4.3.6)':
+  '@ai-sdk/anthropic@3.0.31(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@4.3.6)
-      zod: 4.3.6
+      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.29(zod@4.3.6)':
+  '@ai-sdk/gateway@3.0.29(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
       '@vercel/oidc': 3.1.0
-      zod: 4.3.6
+      zod: 3.25.76
 
-  '@ai-sdk/groq@3.0.19(zod@4.3.6)':
+  '@ai-sdk/groq@3.0.19(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@4.3.6)
-      zod: 4.3.6
+      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/openai@3.0.23(zod@4.3.6)':
+  '@ai-sdk/openai@3.0.23(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@4.3.6)
-      zod: 4.3.6
+      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/provider-utils@4.0.11(zod@4.3.6)':
+  '@ai-sdk/provider-utils@4.0.11(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.6
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
-      zod: 4.3.6
+      zod: 3.25.76
 
   '@ai-sdk/provider@3.0.6':
     dependencies:
@@ -5440,13 +5437,13 @@ snapshots:
 
   acorn@8.14.1: {}
 
-  ai@6.0.62(zod@4.3.6):
+  ai@6.0.62(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 3.0.29(zod@4.3.6)
+      '@ai-sdk/gateway': 3.0.29(zod@3.25.76)
       '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
-      zod: 4.3.6
+      zod: 3.25.76
 
   ansi-escapes@4.3.2:
     dependencies:
@@ -5514,14 +5511,14 @@ snapshots:
 
   browserslist@4.22.1:
     dependencies:
-      caniuse-lite: 1.0.30001720
+      caniuse-lite: 1.0.30001766
       electron-to-chromium: 1.5.161
       node-releases: 2.0.19
       update-browserslist-db: 1.1.3(browserslist@4.22.1)
 
   browserslist@4.25.0:
     dependencies:
-      caniuse-lite: 1.0.30001720
+      caniuse-lite: 1.0.30001766
       electron-to-chromium: 1.5.161
       node-releases: 2.0.19
       update-browserslist-db: 1.1.3(browserslist@4.25.0)
@@ -5573,8 +5570,6 @@ snapshots:
   camelcase-css@2.0.1: {}
 
   camelcase@6.3.0: {}
-
-  caniuse-lite@1.0.30001720: {}
 
   caniuse-lite@1.0.30001766: {}
 
@@ -7064,4 +7059,4 @@ snapshots:
 
   yoctocolors-cjs@2.1.2: {}
 
-  zod@4.3.6: {}
+  zod@3.25.76: {}

@@ -15,7 +15,12 @@ export function createProvider(config: AIConfig): LanguageModel {
 
   switch (config.provider) {
     case 'anthropic': {
-      const anthropic = createAnthropic({ apiKey: config.apiKey })
+      const anthropic = createAnthropic({
+        apiKey: config.apiKey,
+        headers: {
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+      })
       return anthropic(model)
     }
     case 'openai': {

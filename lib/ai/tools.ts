@@ -1,16 +1,17 @@
-import { tool } from 'ai'
-import { z } from 'zod'
-
 // Browser automation tools that the AI agent can use
+// Using direct JSON schema format for Anthropic compatibility
 
 export const browserTools = {
-  // Navigate to a URL
-  navigate: tool({
+  navigate: {
     description: 'Navigate the current tab to a specified URL',
-    parameters: z.object({
-      url: z.string().describe('The URL to navigate to'),
-    }),
-    execute: async ({ url }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The URL to navigate to' },
+      },
+      required: ['url'],
+    },
+    execute: async ({ url }: { url: string }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab?.id) {
         await chrome.tabs.update(tab.id, { url })
@@ -18,37 +19,46 @@ export const browserTools = {
       }
       return { success: false, error: 'No active tab found' }
     },
-  }),
+  },
 
-  // Create a new tab
-  createTab: tool({
+  createTab: {
     description: 'Create a new browser tab with an optional URL',
-    parameters: z.object({
-      url: z.string().optional().describe('The URL for the new tab'),
-      active: z.boolean().default(true).describe('Whether to make the new tab active'),
-    }),
-    execute: async ({ url, active }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The URL for the new tab' },
+        active: { type: 'boolean', description: 'Whether to make the new tab active' },
+      },
+      required: [],
+    },
+    execute: async ({ url, active = true }: { url?: string; active?: boolean }) => {
       const tab = await chrome.tabs.create({ url, active })
       return { success: true, tabId: tab.id, url: tab.url }
     },
-  }),
+  },
 
-  // Close a tab
-  closeTab: tool({
+  closeTab: {
     description: 'Close a browser tab by its ID',
-    parameters: z.object({
-      tabId: z.number().describe('The ID of the tab to close'),
-    }),
-    execute: async ({ tabId }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        tabId: { type: 'number', description: 'The ID of the tab to close' },
+      },
+      required: ['tabId'],
+    },
+    execute: async ({ tabId }: { tabId: number }) => {
       await chrome.tabs.remove(tabId)
       return { success: true, closedTabId: tabId }
     },
-  }),
+  },
 
-  // Get all open tabs
-  getTabs: tool({
+  getTabs: {
     description: 'Get a list of all open browser tabs',
-    parameters: z.object({}),
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
     execute: async () => {
       const tabs = await chrome.tabs.query({})
       return {
@@ -61,12 +71,15 @@ export const browserTools = {
         })),
       }
     },
-  }),
+  },
 
-  // Get the active tab
-  getActiveTab: tool({
+  getActiveTab: {
     description: 'Get information about the currently active tab',
-    parameters: z.object({}),
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
     execute: async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (tab) {
@@ -79,28 +92,34 @@ export const browserTools = {
       }
       return { error: 'No active tab found' }
     },
-  }),
+  },
 
-  // Switch to a specific tab
-  switchTab: tool({
+  switchTab: {
     description: 'Switch to a specific tab by its ID',
-    parameters: z.object({
-      tabId: z.number().describe('The ID of the tab to switch to'),
-    }),
-    execute: async ({ tabId }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        tabId: { type: 'number', description: 'The ID of the tab to switch to' },
+      },
+      required: ['tabId'],
+    },
+    execute: async ({ tabId }: { tabId: number }) => {
       await chrome.tabs.update(tabId, { active: true })
       const tab = await chrome.tabs.get(tabId)
       return { success: true, tab: { id: tab.id, title: tab.title, url: tab.url } }
     },
-  }),
+  },
 
-  // Take a screenshot of the current tab
-  screenshot: tool({
+  screenshot: {
     description: 'Capture a screenshot of the currently visible tab',
-    parameters: z.object({
-      format: z.enum(['png', 'jpeg']).default('png').describe('Image format'),
-    }),
-    execute: async ({ format }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        format: { type: 'string', enum: ['png', 'jpeg'], description: 'Image format' },
+      },
+      required: [],
+    },
+    execute: async ({ format = 'png' }: { format?: 'png' | 'jpeg' }) => {
       try {
         const dataUrl = await chrome.tabs.captureVisibleTab(undefined, {
           format,
@@ -111,15 +130,18 @@ export const browserTools = {
         return { success: false, error: String(error) }
       }
     },
-  }),
+  },
 
-  // Execute JavaScript in the current tab
-  executeScript: tool({
+  executeScript: {
     description: 'Execute JavaScript code in the current tab. Use this to interact with page content.',
-    parameters: z.object({
-      code: z.string().describe('JavaScript code to execute in the page context'),
-    }),
-    execute: async ({ code }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'JavaScript code to execute in the page context' },
+      },
+      required: ['code'],
+    },
+    execute: async ({ code }: { code: string }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
         return { success: false, error: 'No active tab' }
@@ -143,15 +165,18 @@ export const browserTools = {
         return { success: false, error: String(error) }
       }
     },
-  }),
+  },
 
-  // Click an element on the page
-  click: tool({
+  click: {
     description: 'Click an element on the page using a CSS selector',
-    parameters: z.object({
-      selector: z.string().describe('CSS selector for the element to click'),
-    }),
-    execute: async ({ selector }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector for the element to click' },
+      },
+      required: ['selector'],
+    },
+    execute: async ({ selector }: { selector: string }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
         return { success: false, error: 'No active tab' }
@@ -176,17 +201,20 @@ export const browserTools = {
         return { success: false, error: String(error) }
       }
     },
-  }),
+  },
 
-  // Type text into an input field
-  type: tool({
+  type: {
     description: 'Type text into an input field using a CSS selector',
-    parameters: z.object({
-      selector: z.string().describe('CSS selector for the input element'),
-      text: z.string().describe('Text to type into the input'),
-      clear: z.boolean().default(false).describe('Whether to clear existing text first'),
-    }),
-    execute: async ({ selector, text, clear }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector for the input element' },
+        text: { type: 'string', description: 'Text to type into the input' },
+        clear: { type: 'boolean', description: 'Whether to clear existing text first' },
+      },
+      required: ['selector', 'text'],
+    },
+    execute: async ({ selector, text, clear = false }: { selector: string; text: string; clear?: boolean }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
         return { success: false, error: 'No active tab' }
@@ -214,15 +242,18 @@ export const browserTools = {
         return { success: false, error: String(error) }
       }
     },
-  }),
+  },
 
-  // Get page content/text
-  getPageContent: tool({
+  getPageContent: {
     description: 'Get the text content of the current page or a specific element',
-    parameters: z.object({
-      selector: z.string().optional().describe('CSS selector for a specific element (omit for entire page)'),
-    }),
-    execute: async ({ selector }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector for a specific element (omit for entire page)' },
+      },
+      required: [],
+    },
+    execute: async ({ selector }: { selector?: string }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
         return { success: false, error: 'No active tab' }
@@ -236,7 +267,7 @@ export const browserTools = {
             if (el) {
               return {
                 success: true,
-                content: el.textContent?.slice(0, 10000), // Limit content size
+                content: el.textContent?.slice(0, 10000),
                 title: document.title,
                 url: window.location.href,
               }
@@ -251,17 +282,20 @@ export const browserTools = {
         return { success: false, error: String(error) }
       }
     },
-  }),
+  },
 
-  // Scroll the page
-  scroll: tool({
+  scroll: {
     description: 'Scroll the page by a specified amount or to an element',
-    parameters: z.object({
-      direction: z.enum(['up', 'down', 'top', 'bottom']).optional(),
-      selector: z.string().optional().describe('CSS selector of element to scroll to'),
-      pixels: z.number().optional().describe('Number of pixels to scroll'),
-    }),
-    execute: async ({ direction, selector, pixels }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        direction: { type: 'string', enum: ['up', 'down', 'top', 'bottom'], description: 'Direction to scroll' },
+        selector: { type: 'string', description: 'CSS selector of element to scroll to' },
+        pixels: { type: 'number', description: 'Number of pixels to scroll' },
+      },
+      required: [],
+    },
+    execute: async ({ direction, selector, pixels }: { direction?: string; selector?: string; pixels?: number }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
         return { success: false, error: 'No active tab' }
@@ -307,17 +341,20 @@ export const browserTools = {
         return { success: false, error: String(error) }
       }
     },
-  }),
+  },
 
-  // Wait for a condition
-  wait: tool({
+  wait: {
     description: 'Wait for a specified duration or for an element to appear',
-    parameters: z.object({
-      ms: z.number().optional().describe('Milliseconds to wait'),
-      selector: z.string().optional().describe('CSS selector to wait for'),
-      timeout: z.number().default(5000).describe('Maximum time to wait in ms'),
-    }),
-    execute: async ({ ms, selector, timeout }) => {
+    parameters: {
+      type: 'object',
+      properties: {
+        ms: { type: 'number', description: 'Milliseconds to wait' },
+        selector: { type: 'string', description: 'CSS selector to wait for' },
+        timeout: { type: 'number', description: 'Maximum time to wait in ms (default 5000)' },
+      },
+      required: [],
+    },
+    execute: async ({ ms, selector, timeout = 5000 }: { ms?: number; selector?: string; timeout?: number }) => {
       if (ms) {
         await new Promise((resolve) => setTimeout(resolve, ms))
         return { success: true, waited: ms }
@@ -347,7 +384,7 @@ export const browserTools = {
 
       return { success: false, error: 'Must specify ms or selector' }
     },
-  }),
+  },
 }
 
 export type BrowserToolName = keyof typeof browserTools
