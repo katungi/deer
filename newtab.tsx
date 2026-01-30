@@ -4,7 +4,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
-import { Plus, Settings as SettingsIcon, Camera, Mic, ChevronDown, ChevronUp } from "lucide-react"
+import { detectInputType, normalizeUrl, buildSearchUrl, type InputType } from "@/lib/inputDetection"
+import { Plus, Settings as SettingsIcon, Camera, Mic, ChevronDown, ChevronUp, Globe, Search, MessageCircle } from "lucide-react"
 import "./style.css"
 
 interface Message {
@@ -54,6 +55,14 @@ function NewTabPage() {
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [showPermissionRequest, setShowPermissionRequest] = useState(false)
+  const [searchEngine, setSearchEngine] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('deer-search-engine') || 'google'
+    }
+    return 'google'
+  })
+  const [detectedInputType, setDetectedInputType] = useState<InputType>('search')
+  const [forcedMode, setForcedMode] = useState<'search' | 'chat' | null>(null)
   const inputRef = useRef<HTMLDivElement>(null)
 
   // Apply theme color and dark mode to document
@@ -71,6 +80,11 @@ function NewTabPage() {
     localStorage.setItem('deer-dark-mode', String(darkMode))
   }, [darkMode])
 
+  // Persist search engine to localStorage
+  useEffect(() => {
+    localStorage.setItem('deer-search-engine', searchEngine)
+  }, [searchEngine])
+
   // Listen for storage changes from other pages (sidepanel, etc.)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -79,6 +93,9 @@ function NewTabPage() {
       }
       if (e.key === 'deer-dark-mode') {
         setDarkMode(e.newValue === 'true')
+      }
+      if (e.key === 'deer-search-engine' && e.newValue) {
+        setSearchEngine(e.newValue)
       }
     }
 
@@ -185,6 +202,26 @@ function NewTabPage() {
     const messageText = getPlainText().trim()
     if (!messageText && selectedTabs.length === 0 && attachedImages.length === 0) return
 
+    const autoDetectedType = detectInputType(messageText, selectedTabs.length > 0)
+    // Use forced mode if set, but always respect URL detection
+    const inputType = autoDetectedType === 'url' ? 'url' : (forcedMode || autoDetectedType)
+
+    // Handle URL - navigate directly
+    if (inputType === 'url') {
+      window.location.href = normalizeUrl(messageText)
+      return
+    }
+
+    // Handle search - use selected search engine
+    if (inputType === 'search') {
+      window.location.href = buildSearchUrl(messageText, searchEngine)
+      return
+    }
+
+    // Reset forced mode after sending
+    setForcedMode(null)
+
+    // Handle chat - existing behavior
     const newMessage: Message = {
       id: Date.now().toString(),
       text: messageText,
@@ -238,6 +275,9 @@ function NewTabPage() {
 
     const text = inputRef.current.textContent || ""
     setInputText(text)
+
+    // Update detected input type for visual indicator
+    setDetectedInputType(detectInputType(text, selectedTabs.length > 0))
 
     const selection = window.getSelection()
     if (selection && selection.rangeCount > 0) {
@@ -459,6 +499,39 @@ function NewTabPage() {
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700">
                     <Mic className="h-4 w-4" />
                   </Button>
+                  {/* Input type indicator / mode toggle */}
+                  {inputText.trim() && (
+                    <>
+                      {detectedInputType === 'url' ? (
+                        <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 mr-1">
+                          <Globe className="h-3.5 w-3.5" />
+                          <span>Go to site</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const currentEffective = forcedMode || detectedInputType
+                            setForcedMode(currentEffective === 'search' ? 'chat' : 'search')
+                          }}
+                          className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 mr-1 px-2 py-1 rounded-md hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                          title="Click to toggle between Search and Chat"
+                        >
+                          {(forcedMode || detectedInputType) === 'search' ? (
+                            <>
+                              <Search className="h-3.5 w-3.5" />
+                              <span>Search</span>
+                            </>
+                          ) : (
+                            <>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              <span>Ask AI</span>
+                            </>
+                          )}
+                          <ChevronDown className="h-3 w-3 opacity-50" />
+                        </button>
+                      )}
+                    </>
+                  )}
                   <Button
                     onClick={handleSendMessage}
                     disabled={!inputText.trim() && selectedTabs.length === 0 && attachedImages.length === 0}
@@ -721,6 +794,39 @@ function NewTabPage() {
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700">
                   <Mic className="h-4 w-4" />
                 </Button>
+                {/* Input type indicator / mode toggle */}
+                {inputText.trim() && (
+                  <>
+                    {detectedInputType === 'url' ? (
+                      <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 mr-1">
+                        <Globe className="h-3.5 w-3.5" />
+                        <span>Go to site</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const currentEffective = forcedMode || detectedInputType
+                          setForcedMode(currentEffective === 'search' ? 'chat' : 'search')
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400 mr-1 px-2 py-1 rounded-md hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                        title="Click to toggle between Search and Chat"
+                      >
+                        {(forcedMode || detectedInputType) === 'search' ? (
+                          <>
+                            <Search className="h-3.5 w-3.5" />
+                            <span>Search</span>
+                          </>
+                        ) : (
+                          <>
+                            <MessageCircle className="h-3.5 w-3.5" />
+                            <span>Ask AI</span>
+                          </>
+                        )}
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </button>
+                    )}
+                  </>
+                )}
                 <Button
                   onClick={handleSendMessage}
                   disabled={!inputText.trim() && selectedTabs.length === 0 && attachedImages.length === 0}
@@ -810,6 +916,8 @@ function NewTabPage() {
         onColorChange={setThemeColor}
         darkMode={darkMode}
         onDarkModeChange={setDarkMode}
+        searchEngine={searchEngine}
+        onSearchEngineChange={setSearchEngine}
       />
     </div>
   )

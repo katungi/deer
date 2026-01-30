@@ -59,6 +59,12 @@ function IndexSidepanel() {
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [showPermissionRequest, setShowPermissionRequest] = useState(false)
+  const [searchEngine, setSearchEngine] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('deer-search-engine') || 'google'
+    }
+    return 'google'
+  })
   const inputRef = useRef<HTMLDivElement>(null)
 
   const availableFunctions: ChatFunction[] = [
@@ -82,6 +88,11 @@ function IndexSidepanel() {
     localStorage.setItem('deer-dark-mode', String(darkMode))
   }, [darkMode])
 
+  // Persist search engine to localStorage
+  useEffect(() => {
+    localStorage.setItem('deer-search-engine', searchEngine)
+  }, [searchEngine])
+
   // Listen for storage changes from other pages (newtab, etc.)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -90,6 +101,9 @@ function IndexSidepanel() {
       }
       if (e.key === 'deer-dark-mode') {
         setDarkMode(e.newValue === 'true')
+      }
+      if (e.key === 'deer-search-engine' && e.newValue) {
+        setSearchEngine(e.newValue)
       }
     }
 
@@ -684,6 +698,8 @@ function IndexSidepanel() {
         onColorChange={setThemeColor}
         darkMode={darkMode}
         onDarkModeChange={setDarkMode}
+        searchEngine={searchEngine}
+        onSearchEngineChange={setSearchEngine}
       />
     </div>
   )
