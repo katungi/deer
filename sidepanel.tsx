@@ -21,6 +21,12 @@ interface Tab {
   active?: boolean
 }
 
+interface ChatFunction {
+  id: string
+  name: string
+  icon: string
+}
+
 function IndexSidepanel() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState("")
@@ -28,7 +34,14 @@ function IndexSidepanel() {
   const [allTabs, setAllTabs] = useState<Tab[]>([])
   const [showTabDropdown, setShowTabDropdown] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState(0)
+  const [selectedFunction, setSelectedFunction] = useState<ChatFunction | null>(null)
   const inputRef = useRef<HTMLDivElement>(null)
+
+  const availableFunctions: ChatFunction[] = [
+    { id: "explain", name: "Explain", icon: "💡" },
+    { id: "summarize", name: "Summarize", icon: "📄" },
+    { id: "analyze", name: "Analyze", icon: "🔍" }
+  ]
 
   const suggestedPrompts = [
     "Summarize this repo",
@@ -67,11 +80,16 @@ function IndexSidepanel() {
 
   const handleSendMessage = () => {
     const messageText = getPlainText().trim()
-    if (!messageText && selectedTabs.length === 0) return
+    if (!messageText && selectedTabs.length === 0 && !selectedFunction) return
+
+    // Build the full message with function prefix if selected
+    const fullText = selectedFunction
+      ? `[${selectedFunction.name}] ${messageText}`.trim()
+      : messageText
 
     const newMessage: Message = {
       id: Date.now().toString(),
-      text: messageText,
+      text: fullText,
       isUser: true,
       timestamp: new Date(),
       tabs: selectedTabs.length > 0 ? [...selectedTabs] : undefined
@@ -80,6 +98,7 @@ function IndexSidepanel() {
     setMessages(prev => [...prev, newMessage])
     setInputText("")
     setSelectedTabs([])
+    setSelectedFunction(null)
 
     if (inputRef.current) {
       inputRef.current.innerHTML = ""
@@ -214,6 +233,16 @@ function IndexSidepanel() {
     if (e.key === 'Backspace') {
       setTimeout(() => handleInput(), 0)
     }
+  }
+
+  const handleFunctionSelect = (func: ChatFunction) => {
+    // Toggle off if same function is selected
+    if (selectedFunction?.id === func.id) {
+      setSelectedFunction(null)
+    } else {
+      setSelectedFunction(func)
+    }
+    inputRef.current?.focus()
   }
 
   return (
@@ -358,44 +387,45 @@ function IndexSidepanel() {
       <div className="p-3 pb-4 bg-white">
         {/* Quick action chips */}
         <div className="flex gap-2 mb-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handlePromptClick("Explain this page")}
-            className="rounded-full text-xs gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-            </svg>
-            Explain
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handlePromptClick("Summarize this page")}
-            className="rounded-full text-xs gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 6h16M4 10h16M4 14h10M4 18h6"/>
-            </svg>
-            Summarize
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handlePromptClick("Analyze this page")}
-            className="rounded-full text-xs gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="M21 21l-4.35-4.35"/>
-            </svg>
-            Analyze
-          </Button>
+          {availableFunctions.map((func) => (
+            <Button
+              key={func.id}
+              variant="secondary"
+              size="sm"
+              onClick={() => handleFunctionSelect(func)}
+              className={cn(
+                "rounded-full text-xs gap-1.5 transition-all",
+                selectedFunction?.id === func.id
+                  ? "bg-violet-100 text-violet-700 border border-violet-300 hover:bg-violet-200"
+                  : "bg-stone-100 hover:bg-stone-200 text-stone-700"
+              )}
+            >
+              <span className="text-sm">{func.icon}</span>
+              {func.name}
+            </Button>
+          ))}
         </div>
 
         {/* Main input box */}
         <div className="flex flex-col bg-white border border-stone-200 rounded-2xl p-3 min-h-[44px]">
+          {/* Selected Function chip */}
+          {selectedFunction && (
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              <div className="flex items-center gap-1.5 bg-violet-100 border border-violet-200 rounded-lg px-2.5 py-1.5 text-xs">
+                <span className="text-sm">{selectedFunction.icon}</span>
+                <span className="text-violet-800 font-medium text-xs">
+                  {selectedFunction.name}
+                </span>
+                <button
+                  onClick={() => setSelectedFunction(null)}
+                  className="bg-transparent border-none cursor-pointer p-0 text-violet-500 text-sm leading-none flex-shrink-0 hover:text-violet-700"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Selected Tabs inside input area */}
           {selectedTabs.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2.5">
@@ -432,7 +462,7 @@ function IndexSidepanel() {
             contentEditable
             onInput={handleInput}
             onKeyDown={handleKeyDown}
-            data-placeholder="Ask a question about this page..."
+            data-placeholder={selectedFunction ? `What would you like to ${selectedFunction.name.toLowerCase()}?` : "Ask a question about this page..."}
             className="border-none bg-transparent outline-none text-sm text-stone-800 leading-relaxed min-h-[20px] max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words mb-2.5 empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 empty:before:pointer-events-none"
             suppressContentEditableWarning
           />
@@ -459,11 +489,11 @@ function IndexSidepanel() {
               </Button>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputText.trim() && selectedTabs.length === 0}
+                disabled={!inputText.trim() && selectedTabs.length === 0 && !selectedFunction}
                 size="icon"
                 className={cn(
                   "h-8 w-8 rounded-lg ml-1",
-                  (inputText.trim() || selectedTabs.length > 0)
+                  (inputText.trim() || selectedTabs.length > 0 || selectedFunction)
                     ? "bg-rose-600 hover:bg-rose-700"
                     : "bg-stone-300"
                 )}
