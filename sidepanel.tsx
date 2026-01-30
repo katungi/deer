@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { Send, Plus, MoreHorizontal, Image, Mic, Maximize2 } from "lucide-react"
+import { DeerMascot } from "@/components/DeerMascot"
 import "./style.css"
 
 interface Message {
@@ -265,15 +266,11 @@ function IndexSidepanel() {
         {messages.length === 0 ? (
           /* Welcome Screen */
           <div className="flex-1 flex flex-col items-center justify-center px-5 py-10">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-8 overflow-hidden">
-              <img
-                src={chrome.runtime.getURL("assets/deer.png")}
-                alt="Deer"
-                className="w-15 h-15 object-cover"
-              />
-            </div>
+            {/* <div className="flex items-center justify-center mb-8">
+              <DeerMascot className="w-20 h-20" />
+            </div> */}
 
-            <div className="w-full max-w-[300px] space-y-2">
+            {/* <div className="w-full max-w-[300px] space-y-2">
               {suggestedPrompts.map((prompt, index) => (
                 <Button
                   key={index}
@@ -287,7 +284,7 @@ function IndexSidepanel() {
                   {prompt}
                 </Button>
               ))}
-            </div>
+            </div> */}
           </div>
         ) : (
           /* Messages */
