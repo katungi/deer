@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Settings } from "@/components/ui/settings"
+import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
-import { Send, Plus, MoreHorizontal, Image, Mic, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, MoreHorizontal, Camera, Mic, ChevronDown, ChevronUp } from "lucide-react"
 import "./style.css"
 
 interface Message {
@@ -21,6 +23,12 @@ interface Tab {
   active?: boolean
 }
 
+interface AttachedImage {
+  id: string
+  dataUrl: string
+  tabTitle?: string
+}
+
 function NewTabPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState("")
@@ -30,7 +38,15 @@ function NewTabPage() {
   const [dropdownPosition, setDropdownPosition] = useState(0)
   const [tabFilterQuery, setTabFilterQuery] = useState("")
   const [showTabsList, setShowTabsList] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [themeColor, setThemeColor] = useState("rose")
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
   const inputRef = useRef<HTMLDivElement>(null)
+
+  // Apply theme color to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeColor)
+  }, [themeColor])
 
   useEffect(() => {
     const fetchTabs = async () => {
@@ -59,9 +75,40 @@ function NewTabPage() {
     }
   }, [])
 
+  const captureTabScreenshot = async () => {
+    try {
+      // Get the active tab or use the first selected tab
+      const targetTab = selectedTabs.length > 0
+        ? selectedTabs[0]
+        : allTabs.find(t => t.active) || allTabs[0]
+
+      if (!targetTab?.id) return
+
+      // Capture the tab screenshot
+      const dataUrl = await chrome.tabs.captureVisibleTab(undefined, {
+        format: 'png',
+        quality: 90
+      })
+
+      const newImage: AttachedImage = {
+        id: Date.now().toString(),
+        dataUrl,
+        tabTitle: targetTab.title
+      }
+
+      setAttachedImages(prev => [...prev, newImage])
+    } catch (error) {
+      console.error('Failed to capture screenshot:', error)
+    }
+  }
+
+  const removeAttachedImage = (imageId: string) => {
+    setAttachedImages(prev => prev.filter(img => img.id !== imageId))
+  }
+
   const handleSendMessage = () => {
     const messageText = getPlainText().trim()
-    if (!messageText && selectedTabs.length === 0) return
+    if (!messageText && selectedTabs.length === 0 && attachedImages.length === 0) return
 
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -74,6 +121,7 @@ function NewTabPage() {
     setMessages(prev => [...prev, newMessage])
     setInputText("")
     setSelectedTabs([])
+    setAttachedImages([])
     setShowTabsList(false)
 
     if (inputRef.current) {
@@ -277,6 +325,27 @@ function NewTabPage() {
                 </div>
               )}
 
+              {/* Attached Images */}
+              {attachedImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {attachedImages.map((img) => (
+                    <div key={img.id} className="relative group">
+                      <img
+                        src={img.dataUrl}
+                        alt={img.tabTitle || 'Screenshot'}
+                        className="h-16 w-auto rounded-lg border border-stone-200 object-cover"
+                      />
+                      <button
+                        onClick={() => removeAttachedImage(img.id)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-stone-800 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Text Input */}
               <div
                 ref={inputRef}
@@ -294,29 +363,39 @@ function NewTabPage() {
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
                     <Plus className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowSettings(true)}
+                    className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="flex gap-1 items-center">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
-                    <Image className="h-4 w-4" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={captureTabScreenshot}
+                    className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                  >
+                    <Camera className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
                     <Mic className="h-4 w-4" />
                   </Button>
                   <Button
                     onClick={handleSendMessage}
-                    disabled={!inputText.trim() && selectedTabs.length === 0}
+                    disabled={!inputText.trim() && selectedTabs.length === 0 && attachedImages.length === 0}
                     size="icon"
                     className={cn(
                       "h-8 w-8 rounded-lg ml-1",
-                      (inputText.trim() || selectedTabs.length > 0)
-                        ? "bg-rose-600 hover:bg-rose-700"
+                      (inputText.trim() || selectedTabs.length > 0 || attachedImages.length > 0)
+                        ? "bg-theme hover:bg-theme-dark"
                         : "bg-stone-300"
                     )}
                   >
-                    <Send className="h-4 w-4 text-white" />
+                    <SendIcon className="h-4 w-4 text-white" />
                   </Button>
                 </div>
               </div>
@@ -485,7 +564,7 @@ function NewTabPage() {
                       className={cn(
                         "max-w-[70%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
                         message.isUser
-                          ? "bg-rose-600 text-white"
+                          ? "bg-theme text-white"
                           : "bg-stone-100 text-stone-800"
                       )}
                     >
@@ -546,29 +625,39 @@ function NewTabPage() {
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
                   <Plus className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowSettings(true)}
+                  className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </div>
               <div className="flex gap-1 items-center">
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
-                  <Image className="h-4 w-4" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={captureTabScreenshot}
+                  className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                >
+                  <Camera className="h-4 w-4" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-100">
                   <Mic className="h-4 w-4" />
                 </Button>
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!inputText.trim() && selectedTabs.length === 0}
+                  disabled={!inputText.trim() && selectedTabs.length === 0 && attachedImages.length === 0}
                   size="icon"
                   className={cn(
                     "h-8 w-8 rounded-lg ml-1",
-                    (inputText.trim() || selectedTabs.length > 0)
-                      ? "bg-rose-600 hover:bg-rose-700"
+                    (inputText.trim() || selectedTabs.length > 0 || attachedImages.length > 0)
+                      ? "bg-theme hover:bg-theme-dark"
                       : "bg-stone-300"
                   )}
                 >
-                  <Send className="h-4 w-4 text-white" />
+                  <SendIcon className="h-4 w-4 text-white" />
                 </Button>
               </div>
             </div>
@@ -614,6 +703,14 @@ function NewTabPage() {
           </div>
         </div>
       )}
+
+      {/* Settings Modal */}
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        selectedColor={themeColor}
+        onColorChange={setThemeColor}
+      />
     </div>
   )
 }

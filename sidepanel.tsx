@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Settings } from "@/components/ui/settings"
+import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
-import { Send, Plus, MoreHorizontal, Image, Mic, Maximize2 } from "lucide-react"
-import { DeerMascot } from "@/components/DeerMascot"
+import { Plus, MoreHorizontal, Camera, Mic, Maximize2, Lightbulb, FileText, Search } from "lucide-react"
 import "./style.css"
 
 interface Message {
@@ -25,7 +26,13 @@ interface Tab {
 interface ChatFunction {
   id: string
   name: string
-  icon: string
+  icon: React.ReactNode
+}
+
+interface AttachedImage {
+  id: string
+  dataUrl: string
+  tabTitle?: string
 }
 
 function IndexSidepanel() {
@@ -36,13 +43,21 @@ function IndexSidepanel() {
   const [showTabDropdown, setShowTabDropdown] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState(0)
   const [selectedFunction, setSelectedFunction] = useState<ChatFunction | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [themeColor, setThemeColor] = useState("rose")
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
   const inputRef = useRef<HTMLDivElement>(null)
 
   const availableFunctions: ChatFunction[] = [
-    { id: "explain", name: "Explain", icon: "💡" },
-    { id: "summarize", name: "Summarize", icon: "📄" },
-    { id: "analyze", name: "Analyze", icon: "🔍" }
+    { id: "explain", name: "Explain", icon: <Lightbulb className="h-3.5 w-3.5" /> },
+    { id: "summarize", name: "Summarize", icon: <FileText className="h-3.5 w-3.5" /> },
+    { id: "analyze", name: "Analyze", icon: <Search className="h-3.5 w-3.5" /> }
   ]
+
+  // Apply theme color to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeColor)
+  }, [themeColor])
 
   const suggestedPrompts = [
     "Summarize this repo",
@@ -79,9 +94,40 @@ function IndexSidepanel() {
     }
   }, [])
 
+  const captureTabScreenshot = async () => {
+    try {
+      // Get the active tab or use the first selected tab
+      const targetTab = selectedTabs.length > 0
+        ? selectedTabs[0]
+        : allTabs.find(t => t.active) || allTabs[0]
+
+      if (!targetTab?.id) return
+
+      // Capture the tab screenshot
+      const dataUrl = await chrome.tabs.captureVisibleTab(undefined, {
+        format: 'png',
+        quality: 90
+      })
+
+      const newImage: AttachedImage = {
+        id: Date.now().toString(),
+        dataUrl,
+        tabTitle: targetTab.title
+      }
+
+      setAttachedImages(prev => [...prev, newImage])
+    } catch (error) {
+      console.error('Failed to capture screenshot:', error)
+    }
+  }
+
+  const removeAttachedImage = (imageId: string) => {
+    setAttachedImages(prev => prev.filter(img => img.id !== imageId))
+  }
+
   const handleSendMessage = () => {
     const messageText = getPlainText().trim()
-    if (!messageText && selectedTabs.length === 0 && !selectedFunction) return
+    if (!messageText && selectedTabs.length === 0 && !selectedFunction && attachedImages.length === 0) return
 
     // Build the full message with function prefix if selected
     const fullText = selectedFunction
@@ -100,6 +146,7 @@ function IndexSidepanel() {
     setInputText("")
     setSelectedTabs([])
     setSelectedFunction(null)
+    setAttachedImages([])
 
     if (inputRef.current) {
       inputRef.current.innerHTML = ""
@@ -335,7 +382,7 @@ function IndexSidepanel() {
                       className={cn(
                         "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
                         message.isUser
-                          ? "bg-rose-600 text-white"
+                          ? "bg-theme text-white"
                           : "bg-stone-100 text-stone-800"
                       )}
                     >
@@ -393,11 +440,11 @@ function IndexSidepanel() {
               className={cn(
                 "rounded-full text-xs gap-1.5 transition-all",
                 selectedFunction?.id === func.id
-                  ? "bg-violet-100 text-violet-700 border border-violet-300 hover:bg-violet-200"
+                  ? "bg-theme-light text-theme border border-theme hover:opacity-80"
                   : "bg-stone-100 hover:bg-stone-200 text-stone-700"
               )}
             >
-              <span className="text-sm">{func.icon}</span>
+              {func.icon}
               {func.name}
             </Button>
           ))}
@@ -405,17 +452,38 @@ function IndexSidepanel() {
 
         {/* Main input box */}
         <div className="flex flex-col bg-white border border-stone-200 rounded-2xl p-3 min-h-[44px]">
+          {/* Attached Images */}
+          {attachedImages.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2.5">
+              {attachedImages.map((img) => (
+                <div key={img.id} className="relative group">
+                  <img
+                    src={img.dataUrl}
+                    alt={img.tabTitle || 'Screenshot'}
+                    className="h-12 w-auto rounded-lg border border-stone-200 object-cover"
+                  />
+                  <button
+                    onClick={() => removeAttachedImage(img.id)}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-stone-800 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Selected Function chip */}
           {selectedFunction && (
             <div className="flex flex-wrap gap-1.5 mb-2.5">
-              <div className="flex items-center gap-1.5 bg-violet-100 border border-violet-200 rounded-lg px-2.5 py-1.5 text-xs">
-                <span className="text-sm">{selectedFunction.icon}</span>
-                <span className="text-violet-800 font-medium text-xs">
+              <div className="flex items-center gap-1.5 bg-theme-light border border-theme rounded-lg px-2.5 py-1.5 text-xs">
+                <span className="text-theme">{selectedFunction.icon}</span>
+                <span className="text-theme font-medium text-xs">
                   {selectedFunction.name}
                 </span>
                 <button
                   onClick={() => setSelectedFunction(null)}
-                  className="bg-transparent border-none cursor-pointer p-0 text-violet-500 text-sm leading-none flex-shrink-0 hover:text-violet-700"
+                  className="bg-transparent border-none cursor-pointer p-0 text-theme text-sm leading-none flex-shrink-0 hover:opacity-70"
                 >
                   ×
                 </button>
@@ -471,36 +539,54 @@ function IndexSidepanel() {
               <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
                 <Plus className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowSettings(true)}
+                className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200"
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </div>
 
             {/* Right icons */}
             <div className="flex gap-1 items-center">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
-                <Image className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={captureTabScreenshot}
+                className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200"
+              >
+                <Camera className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-stone-500 hover:text-stone-700 hover:bg-stone-200">
                 <Mic className="h-4 w-4" />
               </Button>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputText.trim() && selectedTabs.length === 0 && !selectedFunction}
+                disabled={!inputText.trim() && selectedTabs.length === 0 && !selectedFunction && attachedImages.length === 0}
                 size="icon"
                 className={cn(
                   "h-8 w-8 rounded-lg ml-1",
-                  (inputText.trim() || selectedTabs.length > 0 || selectedFunction)
-                    ? "bg-rose-600 hover:bg-rose-700"
+                  (inputText.trim() || selectedTabs.length > 0 || selectedFunction || attachedImages.length > 0)
+                    ? "bg-theme hover:bg-theme-dark"
                     : "bg-stone-300"
                 )}
               >
-                <Send className="h-4 w-4 text-white" />
+                <SendIcon className="h-4 w-4 text-white" />
               </Button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        selectedColor={themeColor}
+        onColorChange={setThemeColor}
+      />
     </div>
   )
 }
