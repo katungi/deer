@@ -1,8 +1,39 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { X, Settings as SettingsIcon, Bell, Shield, Palette, Moon, Search } from "lucide-react"
+import { X, Settings as SettingsIcon, Bell, Shield, Palette, Moon, Search, Camera, Lock, CheckCircle2, AlertCircle } from "lucide-react"
 import { Button } from "./button"
 import { searchEngines } from "@/lib/inputDetection"
+
+interface PermissionStatus {
+  activeTab: boolean
+  tabs: boolean
+}
+
+async function checkPermissions(): Promise<PermissionStatus> {
+  if (typeof chrome === 'undefined' || !chrome.permissions) {
+    return { activeTab: false, tabs: false }
+  }
+
+  const [activeTab, tabs] = await Promise.all([
+    chrome.permissions.contains({ permissions: ['activeTab'] }),
+    chrome.permissions.contains({ permissions: ['tabs'] })
+  ])
+
+  return { activeTab, tabs }
+}
+
+async function requestPermission(permission: string): Promise<boolean> {
+  if (typeof chrome === 'undefined' || !chrome.permissions) {
+    return false
+  }
+
+  try {
+    return await chrome.permissions.request({ permissions: [permission] })
+  } catch (error) {
+    console.error('Permission request failed:', error)
+    return false
+  }
+}
 
 export interface ThemeColor {
   id: string
@@ -43,6 +74,25 @@ export function Settings({
   searchEngine,
   onSearchEngineChange
 }: SettingsProps) {
+  const [permissions, setPermissions] = React.useState<PermissionStatus>({ activeTab: false, tabs: false })
+  const [requestingPermission, setRequestingPermission] = React.useState<string | null>(null)
+
+  // Check permissions when settings open
+  React.useEffect(() => {
+    if (isOpen) {
+      checkPermissions().then(setPermissions)
+    }
+  }, [isOpen])
+
+  const handleRequestPermission = async (permission: 'activeTab' | 'tabs') => {
+    setRequestingPermission(permission)
+    const granted = await requestPermission(permission)
+    if (granted) {
+      setPermissions(prev => ({ ...prev, [permission]: true }))
+    }
+    setRequestingPermission(null)
+  }
+
   if (!isOpen) return null
 
   return (
@@ -69,7 +119,7 @@ export function Settings({
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-6">
+        <div className="p-4 space-y-6 max-h-[70vh] overflow-y-auto">
           {/* Theme Color Section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-stone-300">
@@ -183,6 +233,66 @@ export function Settings({
               <span className="text-sm text-stone-300">Anonymous usage data</span>
               <ToggleSwitch />
             </div>
+          </div>
+
+          {/* Permissions Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-stone-300">
+              <Lock className="h-4 w-4" />
+              <span className="text-sm font-medium">Permissions</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-stone-800/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-stone-400" />
+                <div>
+                  <span className="text-sm text-stone-300">Screenshot capture</span>
+                  <p className="text-xs text-stone-500">Required for capturing tab screenshots</p>
+                </div>
+              </div>
+              {permissions.activeTab ? (
+                <div className="flex items-center gap-1.5 text-green-400 text-xs">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Granted</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleRequestPermission('activeTab')}
+                  disabled={requestingPermission === 'activeTab'}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-700 text-stone-300 hover:bg-stone-600 transition-colors disabled:opacity-50"
+                >
+                  {requestingPermission === 'activeTab' ? 'Requesting...' : 'Grant'}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between p-3 bg-stone-800/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <SettingsIcon className="h-4 w-4 text-stone-400" />
+                <div>
+                  <span className="text-sm text-stone-300">Tab access</span>
+                  <p className="text-xs text-stone-500">Required for reading tab info</p>
+                </div>
+              </div>
+              {permissions.tabs ? (
+                <div className="flex items-center gap-1.5 text-green-400 text-xs">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Granted</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleRequestPermission('tabs')}
+                  disabled={requestingPermission === 'tabs'}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-700 text-stone-300 hover:bg-stone-600 transition-colors disabled:opacity-50"
+                >
+                  {requestingPermission === 'tabs' ? 'Requesting...' : 'Grant'}
+                </button>
+              )}
+            </div>
+            {(!permissions.activeTab || !permissions.tabs) && (
+              <p className="text-xs text-stone-500 flex items-start gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                Some features may not work without required permissions. Grant permissions to enable all features.
+              </p>
+            )}
           </div>
 
           {/* General Section */}
