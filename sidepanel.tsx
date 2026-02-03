@@ -560,6 +560,12 @@ function IndexSidepanel() {
     }
   }
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    document.execCommand('insertText', false, text)
+  }
+
   const handleFunctionSelect = (func: ChatFunction) => {
     // Toggle off if same function is selected
     if (selectedFunction?.id === func.id) {
@@ -625,30 +631,25 @@ function IndexSidepanel() {
                   {/* Tab bubbles */}
                   {message.tabs && message.tabs.length > 0 && (
                     <div className={cn(
-                      "flex flex-col gap-1.5 mb-2",
-                      message.isUser ? "items-end" : "items-start"
+                      "flex flex-wrap gap-1.5 mb-2",
+                      message.isUser ? "justify-end" : "justify-start"
                     )}>
                       {message.tabs.map((tab) => (
                         <div
                           key={tab.id}
-                          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-stone-100 max-w-[280px]"
+                          className="flex items-center gap-1.5 bg-theme-light border border-theme rounded-lg px-2.5 py-1.5 text-xs max-w-[150px]"
                         >
                           <img
                             src={tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'}
                             alt=""
-                            className="w-5 h-5 rounded flex-shrink-0"
+                            className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
                             onError={(e) => {
                               e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23a8a29e"/></svg>'
                             }}
                           />
-                          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                            <div className="truncate text-stone-800 font-medium text-sm">
-                              {tab.title}
-                            </div>
-                            <div className="truncate text-stone-500 text-xs">
-                              {tab.url ? new URL(tab.url).hostname : ""}
-                            </div>
-                          </div>
+                          <span className="truncate text-theme font-medium text-xs">
+                            {tab.title}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -847,6 +848,7 @@ function IndexSidepanel() {
             contentEditable
             onInput={handleInput}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             data-placeholder={selectedFunction ? `What would you like to ${selectedFunction.name.toLowerCase()}?` : agentMode ? "What would you like me to do?" : "Ask me anything..."}
             className="border-none bg-transparent outline-none text-sm text-stone-800 dark:text-stone-100 leading-relaxed min-h-[20px] max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words mb-2.5 empty:before:content-[attr(data-placeholder)] empty:before:text-stone-400 dark:empty:before:text-stone-500 empty:before:pointer-events-none"
             suppressContentEditableWarning

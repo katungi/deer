@@ -1,12 +1,24 @@
 import { useState, useCallback, useRef } from 'react'
 import type { ModelMessage } from 'ai'
 import { generateText } from 'ai'
-import { BrowserAgent } from './agent'
+import { BrowserAgent, RateLimitError } from './agent'
 import { createProvider } from './provider'
 import { showAgentGlow, hideAgentGlow } from './glow'
 import { getAIConfig, hasAPIKey } from './storage'
 import { themeColors } from '@/components/ui/settings'
 import type { AgentState, AgentStep } from './types'
+
+// Helper to detect rate limit errors from various sources
+function isRateLimitError(error: unknown): boolean {
+  if (error instanceof RateLimitError) return true
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    return message.includes('rate limit') ||
+           message.includes('429') ||
+           message.includes('too many requests')
+  }
+  return false
+}
 
 const CHAT_SYSTEM_PROMPT = `You are Deer, a friendly and helpful browser assistant. You help users with questions, explanations, and general conversation. Be concise, clear, and helpful.`
 
@@ -123,11 +135,19 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           },
           onStep: (step) => {
             setMessages(prev =>
-              prev.map(m =>
-                m.id === assistantMessageId
-                  ? { ...m, agentSteps: [...(m.agentSteps || []), step] }
-                  : m
-              )
+              prev.map(m => {
+                if (m.id !== assistantMessageId) return m
+                const existingSteps = m.agentSteps || []
+                const existingIndex = existingSteps.findIndex(s => s.id === step.id)
+                if (existingIndex >= 0) {
+                  // Update existing step
+                  const updatedSteps = [...existingSteps]
+                  updatedSteps[existingIndex] = step
+                  return { ...m, agentSteps: updatedSteps }
+                }
+                // Add new step
+                return { ...m, agentSteps: [...existingSteps, step] }
+              })
             )
           },
           onStateChange: setAgentState,
@@ -165,7 +185,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       }
     } catch (error) {
       console.error('Chat error:', error)
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred'
+
+      let errorMessage: string
+      if (isRateLimitError(error)) {
+        errorMessage = '⏳ Rate limit reached. The API is temporarily unavailable due to high usage. Please wait a minute and try again.'
+      } else {
+        errorMessage = error instanceof Error ? error.message : 'An error occurred'
+      }
 
       setMessages(prev =>
         prev.map(m =>

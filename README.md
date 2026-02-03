@@ -16,3 +16,6 @@ Here are some screenshots:
 ### Sidebar Chat Interface
 
 ![Sidebar](images/sidebar.png)
+
+
+## TODO
