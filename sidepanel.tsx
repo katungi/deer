@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
 import { History } from "@/components/ui/history"
+import { AgentSteps } from "@/components/ui/agent-steps"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
 import {
@@ -14,6 +15,7 @@ import {
   createConversation,
   type Conversation,
 } from "@/lib/ai"
+import type { AgentStep } from "@/lib/ai/types"
 import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon, Zap } from "lucide-react"
 import "./style.css"
 
@@ -24,6 +26,7 @@ interface Message {
   timestamp: Date
   tabs?: Tab[]
   isStreaming?: boolean
+  agentSteps?: AgentStep[]
 }
 
 interface Tab {
@@ -65,6 +68,7 @@ function IndexSidepanel() {
   const {
     messages: aiMessages,
     isLoading: isAiLoading,
+    agentState,
     sendMessage: sendAiMessage,
     stopAgent,
   } = useChat({
@@ -232,6 +236,33 @@ function IndexSidepanel() {
     window.addEventListener('storage', handleStorageChange)
     return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
+
+  // Sync agent steps from AI messages to local messages in real-time
+  useEffect(() => {
+    if (aiMessages.length > 0) {
+      const lastAiMsg = aiMessages[aiMessages.length - 1]
+      if (lastAiMsg.role === 'assistant') {
+        setMessages(prev => {
+          const lastIdx = prev.length - 1
+          const lastLocalMsg = prev[lastIdx]
+          // Only update if the last local message is a streaming assistant message
+          if (lastLocalMsg && !lastLocalMsg.isUser && (lastLocalMsg.isStreaming || lastLocalMsg.agentSteps?.length !== lastAiMsg.agentSteps?.length)) {
+            return prev.map((m, i) =>
+              i === lastIdx
+                ? {
+                    ...m,
+                    text: lastAiMsg.content || m.text,
+                    agentSteps: lastAiMsg.agentSteps,
+                    isStreaming: !lastAiMsg.content && isAiLoading
+                  }
+                : m
+            )
+          }
+          return prev
+        })
+      }
+    }
+  }, [aiMessages, isAiLoading])
 
   const suggestedPrompts = [
     "Summarize this repo",
@@ -622,6 +653,15 @@ function IndexSidepanel() {
                       ))}
                     </div>
                   )}
+                  {/* Agent steps (for assistant messages with steps) */}
+                  {!message.isUser && message.agentSteps && message.agentSteps.length > 0 && (
+                    <div className="max-w-[90%] mb-2">
+                      <AgentSteps
+                        steps={message.agentSteps}
+                        isRunning={message.isStreaming}
+                      />
+                    </div>
+                  )}
                   {/* Message text bubble */}
                   {(message.text || message.isStreaming) && (
                     <div
@@ -632,7 +672,7 @@ function IndexSidepanel() {
                           : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100"
                       )}
                     >
-                      {message.text || (message.isStreaming && (
+                      {message.text || (message.isStreaming && !message.agentSteps?.length && (
                         <span className="flex items-center gap-2">
                           <span className="animate-pulse">Thinking...</span>
                         </span>
@@ -641,6 +681,17 @@ function IndexSidepanel() {
                   )}
                 </div>
               ))}
+              {/* Live agent state (when running but no message yet) */}
+              {isAiLoading && agentState && agentState.steps.length > 0 && (
+                <div className="flex flex-col items-start">
+                  <div className="max-w-[90%]">
+                    <AgentSteps
+                      steps={agentState.steps}
+                      isRunning={agentState.isRunning}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </ScrollArea>
         )}
