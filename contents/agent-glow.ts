@@ -44,6 +44,8 @@ function showGlow(color?: string) {
       inset 0 0 140px 60px ${color}1A
     `
     overlay.style.borderColor = `${color}99`
+    // Update pulse animation to use the custom color
+    updatePulseAnimation(color)
   }
 
   // Trigger reflow for animation
@@ -69,25 +71,37 @@ function pulseGlow() {
   }
 }
 
-// Add pulse animation style
-const style = document.createElement("style")
-style.textContent = `
-  @keyframes deer-glow-pulse {
-    0%, 100% {
-      opacity: 1;
-      box-shadow: inset 0 0 60px 20px rgba(59, 130, 246, 0.5),
-                  inset 0 0 100px 40px rgba(59, 130, 246, 0.3),
-                  inset 0 0 140px 60px rgba(59, 130, 246, 0.1);
+// Default color for pulse animation
+const DEFAULT_COLOR = "#3b82f6"
+
+function updatePulseAnimation(color: string) {
+  // Remove old style if it exists
+  const existingStyle = document.getElementById("deer-glow-style")
+  if (existingStyle) existingStyle.remove()
+
+  const style = document.createElement("style")
+  style.id = "deer-glow-style"
+  style.textContent = `
+    @keyframes deer-glow-pulse {
+      0%, 100% {
+        opacity: 1;
+        box-shadow: inset 0 0 60px 20px ${color}80,
+                    inset 0 0 100px 40px ${color}4D,
+                    inset 0 0 140px 60px ${color}1A;
+      }
+      50% {
+        opacity: 0.7;
+        box-shadow: inset 0 0 40px 15px ${color}66,
+                    inset 0 0 70px 30px ${color}33,
+                    inset 0 0 100px 45px ${color}1A;
+      }
     }
-    50% {
-      opacity: 0.7;
-      box-shadow: inset 0 0 40px 15px rgba(59, 130, 246, 0.4),
-                  inset 0 0 70px 30px rgba(59, 130, 246, 0.2),
-                  inset 0 0 100px 45px rgba(59, 130, 246, 0.1);
-    }
-  }
-`
-document.head.appendChild(style)
+  `
+  document.head.appendChild(style)
+}
+
+// Initialize with default color
+updatePulseAnimation(DEFAULT_COLOR)
 
 // Listen for messages from the extension
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

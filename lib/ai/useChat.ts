@@ -5,6 +5,7 @@ import { BrowserAgent } from './agent'
 import { createProvider } from './provider'
 import { showAgentGlow, hideAgentGlow } from './glow'
 import { getAIConfig, hasAPIKey } from './storage'
+import { themeColors } from '@/components/ui/settings'
 import type { AgentState, AgentStep } from './types'
 
 const CHAT_SYSTEM_PROMPT = `You are Deer, a friendly and helpful browser assistant. You help users with questions, explanations, and general conversation. Be concise, clear, and helpful.`
@@ -102,7 +103,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
     // Show glow effect only in agent mode
     if (context?.agentMode) {
-      showAgentGlow({ pulse: true })
+      const themeColorId = localStorage.getItem('deer-theme-color') || 'rose'
+      const themeColorHex = themeColors.find(c => c.id === themeColorId)?.value || '#e11d48'
+      showAgentGlow({ color: themeColorHex, pulse: true })
     }
 
     try {
