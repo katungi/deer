@@ -19,3 +19,12 @@ Here are some screenshots:
 
 
 ## TODO
+
+[ ] - Make agent faster?
+[ ] - Make agent remember, maybe add super memory?
+[ ] - Move to Kimi k2.5.
+[ ] - Show on the tab that an agent is running, highlight the tab maybe. 
+[ ] - Custom instructions for harder to navigate websites like Notion.
+[ ] - Fix rate limits. 
+[ ] - Store chats to Dexie.
+[ ] - Improve tool calls and tool handling. 
