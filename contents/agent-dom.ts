@@ -77,6 +77,39 @@ const INTERACTIVE_ROLES = ["button", "link", "checkbox", "radio", "textbox", "co
 const SKIP_TAGS = ["script", "style", "meta", "link", "title", "noscript"]
 const SEMANTIC_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6", "nav", "main", "header", "footer", "section", "article", "aside"]
 
+// Injection defense patterns - filter these from DOM content to prevent prompt injection
+const INJECTION_PATTERNS = [
+  /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)/gi,
+  /disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)/gi,
+  /forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)/gi,
+  /system\s*:\s*(new\s+)?instructions?/gi,
+  /admin(istrator)?\s+(override|mode|access)/gi,
+  /you\s+are\s+now\s+(a|an|in)/gi,
+  /new\s+system\s+prompt/gi,
+  /override\s+safety/gi,
+  /bypass\s+(security|restrictions?|rules?)/gi,
+  /developer\s+mode\s+(enabled?|activate)/gi,
+  /as\s+an?\s+AI\s+(you\s+must|assistant)/gi,
+  /jailbreak/gi,
+  /DAN\s+mode/gi,
+  /pretend\s+(you('re|\s+are)\s+)?(a|an|not)/gi,
+]
+
+/**
+ * Sanitize text content to remove potential prompt injection attempts.
+ * Replaces suspicious patterns with [FILTERED] marker.
+ */
+function sanitizeTextContent(text: string): string {
+  if (!text) return text
+
+  let sanitized = text
+  for (const pattern of INJECTION_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "[FILTERED]")
+  }
+
+  return sanitized
+}
+
 function getRole(element: Element): string {
   const role = element.getAttribute("role")
   if (role) return role
@@ -94,48 +127,53 @@ function getRole(element: Element): string {
 function getCleanName(element: Element): string {
   const tag = element.tagName.toLowerCase()
 
+  // Helper to sanitize and return text
+  const sanitize = (text: string | null | undefined): string => {
+    if (!text?.trim()) return ""
+    return sanitizeTextContent(text.trim())
+  }
+
   // For selects, get the selected option text
   if (tag === "select") {
     const selectEl = element as HTMLSelectElement
     const selectedOption = selectEl.querySelector("option[selected]") || selectEl.options[selectEl.selectedIndex]
-    if (selectedOption?.textContent?.trim()) {
-      return selectedOption.textContent.trim()
-    }
+    const optText = sanitize(selectedOption?.textContent)
+    if (optText) return optText
   }
 
   // Priority order for names
-  const ariaLabel = element.getAttribute("aria-label")
-  if (ariaLabel?.trim()) return ariaLabel.trim()
+  const ariaLabel = sanitize(element.getAttribute("aria-label"))
+  if (ariaLabel) return ariaLabel
 
-  const placeholder = element.getAttribute("placeholder")
-  if (placeholder?.trim()) return placeholder.trim()
+  const placeholder = sanitize(element.getAttribute("placeholder"))
+  if (placeholder) return placeholder
 
-  const title = element.getAttribute("title")
-  if (title?.trim()) return title.trim()
+  const title = sanitize(element.getAttribute("title"))
+  if (title) return title
 
-  const alt = element.getAttribute("alt")
-  if (alt?.trim()) return alt.trim()
+  const alt = sanitize(element.getAttribute("alt"))
+  if (alt) return alt
 
   // For form labels
   if (element.id) {
     const label = document.querySelector(`label[for="${element.id}"]`)
-    if (label?.textContent?.trim()) {
-      return label.textContent.trim()
-    }
+    const labelText = sanitize(label?.textContent)
+    if (labelText) return labelText
   }
 
   // For inputs with values
   if (tag === "input") {
     const inputEl = element as HTMLInputElement
     const type = element.getAttribute("type") || ""
-    const value = element.getAttribute("value")
+    const value = sanitize(element.getAttribute("value"))
 
-    if (type === "submit" && value?.trim()) {
-      return value.trim()
+    if (type === "submit" && value) {
+      return value
     }
 
-    if (inputEl.value && inputEl.value.length < 50 && inputEl.value.trim()) {
-      return inputEl.value.trim()
+    const inputValue = sanitize(inputEl.value)
+    if (inputValue && inputValue.length < 50) {
+      return inputValue
     }
   }
 
@@ -147,14 +185,15 @@ function getCleanName(element: Element): string {
         directText += node.textContent || ""
       }
     }
-    if (directText.trim()) return directText.trim()
+    const sanitized = sanitize(directText)
+    if (sanitized) return sanitized
   }
 
   // For headings
   if (/^h[1-6]$/.test(tag)) {
-    const text = element.textContent
-    if (text?.trim()) {
-      return text.trim().substring(0, 100)
+    const text = sanitize(element.textContent)
+    if (text) {
+      return text.substring(0, 100)
     }
   }
 
@@ -174,9 +213,9 @@ function getCleanName(element: Element): string {
       directText += node.textContent || ""
     }
   }
-  if (directText.trim() && directText.trim().length >= 3) {
-    const trimmed = directText.trim()
-    return trimmed.length > 50 ? trimmed.substring(0, 50) + "..." : trimmed
+  const sanitizedDirect = sanitize(directText)
+  if (sanitizedDirect && sanitizedDirect.length >= 3) {
+    return sanitizedDirect.length > 50 ? sanitizedDirect.substring(0, 50) + "..." : sanitizedDirect
   }
 
   return ""
@@ -510,6 +549,95 @@ function scrollToElement(ref: string): ActionResult {
   return { success: true, message: `Scrolled to element ${ref}`, ref }
 }
 
+interface GetTextResult {
+  success: boolean
+  text?: string
+  url?: string
+  title?: string
+  truncated?: boolean
+  error?: string
+}
+
+function getPageTextContent(selector?: string, maxLength = 10000): GetTextResult {
+  try {
+    const root = selector ? document.querySelector(selector) : document.body
+    if (!root) {
+      return {
+        success: false,
+        error: selector ? `No element found matching selector: "${selector}"` : "No document body found",
+      }
+    }
+
+    // Use TreeWalker to extract only visible text nodes
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        const parent = node.parentElement
+        if (!parent) return NodeFilter.FILTER_REJECT
+
+        // Skip hidden elements
+        const style = window.getComputedStyle(parent)
+        if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+          return NodeFilter.FILTER_REJECT
+        }
+
+        // Skip script, style, and other non-content tags
+        const tag = parent.tagName.toLowerCase()
+        if (["script", "style", "noscript", "template", "svg", "path"].includes(tag)) {
+          return NodeFilter.FILTER_REJECT
+        }
+
+        // Skip aria-hidden elements
+        if (parent.getAttribute("aria-hidden") === "true") {
+          return NodeFilter.FILTER_REJECT
+        }
+
+        return NodeFilter.FILTER_ACCEPT
+      },
+    })
+
+    const textParts: string[] = []
+    let totalLength = 0
+    let truncated = false
+    let node: Node | null
+
+    while ((node = walker.nextNode())) {
+      const content = node.textContent?.trim()
+      if (content && content.length > 0) {
+        // Check if adding this would exceed maxLength
+        if (totalLength + content.length > maxLength) {
+          // Add partial content up to the limit
+          const remaining = maxLength - totalLength
+          if (remaining > 0) {
+            textParts.push(content.substring(0, remaining))
+          }
+          truncated = true
+          break
+        }
+
+        textParts.push(content)
+        totalLength += content.length + 1 // +1 for the space we'll add between parts
+      }
+    }
+
+    // Join with spaces, clean up multiple whitespace, and sanitize for injection
+    const rawText = textParts.join(" ").replace(/\s+/g, " ").trim()
+    const text = sanitizeTextContent(rawText)
+
+    return {
+      success: true,
+      text,
+      url: window.location.href,
+      title: sanitizeTextContent(document.title),
+      truncated,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: `Failed to extract text: ${String(error)}`,
+    }
+  }
+}
+
 // Listen for messages from the extension
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "DEER_DOM") {
@@ -540,6 +668,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse(scrollResult)
           break
 
+        case "getText":
+          const textResult = getPageTextContent(message.selector, message.maxLength)
+          sendResponse(textResult)
+          break
+
         default:
           sendResponse({ success: false, error: "Unknown action" })
       }
@@ -551,4 +684,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 })
 
 // Export functions for direct use (e.g., via chrome.scripting.executeScript)
-export { generateAccessibilityTree, getElementByRef, clickElement, formInput, scrollToElement }
+export { generateAccessibilityTree, getElementByRef, clickElement, formInput, scrollToElement, getPageTextContent }

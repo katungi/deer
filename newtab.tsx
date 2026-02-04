@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
+import Markdown from "marked-react"
 import { detectInputType, normalizeUrl, buildSearchUrl, type InputType } from "@/lib/inputDetection"
 import { Plus, Settings as SettingsIcon, Camera, Mic, ChevronDown, ChevronUp, Globe, Search, MessageCircle } from "lucide-react"
 import "./style.css"
@@ -710,13 +711,17 @@ function NewTabPage() {
                   {message.text && (
                     <div
                       className={cn(
-                        "max-w-[70%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
+                        "max-w-[70%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed",
                         message.isUser
-                          ? "bg-theme text-white"
-                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100"
+                          ? "bg-theme text-white whitespace-pre-wrap"
+                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 prose-ai"
                       )}
                     >
-                      {message.text}
+                      {message.isUser ? (
+                        message.text
+                      ) : (
+                        <Markdown gfm>{message.text}</Markdown>
+                      )}
                     </div>
                   )}
                 </div>

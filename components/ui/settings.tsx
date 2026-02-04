@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import { X, Settings as SettingsIcon, Bell, Shield, Palette, Moon, Search, Camera, Lock, CheckCircle2, AlertCircle, Bot, Key, Eye, EyeOff } from "lucide-react"
 import { Button } from "./button"
 import { searchEngines } from "@/lib/inputDetection"
-import { getAIConfig, saveAIConfig, type AIConfig, type AIProvider, getAvailableModels } from "@/lib/ai"
+import { getAIConfig, saveAIConfig, type AIConfig, type AIProvider, getAvailableModels, getDefaultVisionModel } from "@/lib/ai"
 
 interface PermissionStatus {
   activeTab: boolean
@@ -55,6 +55,7 @@ export const themeColors: ThemeColor[] = [
 ]
 
 const AI_PROVIDERS: { id: AIProvider; name: string; description: string }[] = [
+  { id: 'nvidia', name: 'NVIDIA', description: 'Kimi K2.5 (Free)' },
   { id: 'anthropic', name: 'Anthropic', description: 'Claude models' },
   { id: 'openai', name: 'OpenAI', description: 'GPT models' },
   { id: 'groq', name: 'Groq', description: 'Fast inference' },
@@ -85,9 +86,10 @@ export function Settings({
   const [requestingPermission, setRequestingPermission] = React.useState<string | null>(null)
 
   // AI Configuration state
-  const [aiProvider, setAiProvider] = React.useState<AIProvider>('anthropic')
+  const [aiProvider, setAiProvider] = React.useState<AIProvider>('nvidia')
   const [apiKey, setApiKey] = React.useState('')
   const [selectedModel, setSelectedModel] = React.useState('')
+  const [selectedVisionModel, setSelectedVisionModel] = React.useState('')
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [aiConfigSaved, setAiConfigSaved] = React.useState(false)
 
@@ -102,6 +104,7 @@ export function Settings({
           setAiProvider(config.provider)
           setApiKey(config.apiKey)
           setSelectedModel(config.model || '')
+          setSelectedVisionModel(config.visionModel || '')
           setAiConfigSaved(true)
         }
       })
@@ -124,6 +127,7 @@ export function Settings({
       provider: aiProvider,
       apiKey: apiKey.trim(),
       model: selectedModel || undefined,
+      visionModel: selectedVisionModel || undefined,
     }
     await saveAIConfig(config)
     setAiConfigSaved(true)
@@ -132,6 +136,7 @@ export function Settings({
   const handleProviderChange = (provider: AIProvider) => {
     setAiProvider(provider)
     setSelectedModel('') // Reset model when provider changes
+    setSelectedVisionModel('') // Reset vision model when provider changes
     setAiConfigSaved(false)
   }
 
@@ -249,7 +254,7 @@ export function Settings({
                       setApiKey(e.target.value)
                       setAiConfigSaved(false)
                     }}
-                    placeholder={`Enter your ${aiProvider === 'anthropic' ? 'Anthropic' : aiProvider === 'openai' ? 'OpenAI' : 'Groq'} API key`}
+                    placeholder={`Enter your ${aiProvider === 'nvidia' ? 'NVIDIA' : aiProvider === 'anthropic' ? 'Anthropic' : aiProvider === 'openai' ? 'OpenAI' : 'Groq'} API key`}
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg px-9 py-2 text-sm text-stone-200 placeholder-stone-500 focus:outline-none focus:border-stone-600"
                   />
                   <button
@@ -280,6 +285,29 @@ export function Settings({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Vision Model Selection */}
+            <div className="space-y-2">
+              <span className="text-xs text-stone-400">Vision Model (for screenshots)</span>
+              <select
+                value={selectedVisionModel}
+                onChange={(e) => {
+                  setSelectedVisionModel(e.target.value)
+                  setAiConfigSaved(false)
+                }}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-sm text-stone-200 focus:outline-none focus:border-stone-600"
+              >
+                <option value="">Default ({getDefaultVisionModel(aiProvider)})</option>
+                {availableModels.filter(m => m.includes('vision') || m.includes('4o') || m.includes('claude')).map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-stone-500">
+                Used for faster page analysis with screenshots
+              </p>
             </div>
 
             {/* Save Button */}

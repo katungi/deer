@@ -151,4 +151,87 @@
   .hover\:bg-theme-dark:hover {
     background-color: var(--theme-color-dark);
   }
+
+  /* Theme glow effect for active/in-progress items */
+  .glow-theme {
+    box-shadow: 0 0 8px 2px var(--theme-color), 0 0 16px 4px color-mix(in srgb, var(--theme-color) 40%, transparent);
+  }
+  .glow-theme-subtle {
+    box-shadow: 0 0 4px 1px color-mix(in srgb, var(--theme-color) 60%, transparent);
+  }
+  .ring-theme {
+    --tw-ring-color: var(--theme-color);
+  }
+
+  /* Markdown prose styles for AI messages */
+  .prose-ai {
+    @apply text-sm leading-relaxed;
+  }
+
+  .prose-ai p {
+    @apply my-2 first:mt-0 last:mb-0;
+  }
+
+  .prose-ai h1, .prose-ai h2, .prose-ai h3, .prose-ai h4, .prose-ai h5, .prose-ai h6 {
+    @apply font-semibold mt-4 mb-2 first:mt-0;
+  }
+
+  .prose-ai h1 { @apply text-lg; }
+  .prose-ai h2 { @apply text-base; }
+  .prose-ai h3 { @apply text-sm font-semibold; }
+
+  .prose-ai ul, .prose-ai ol {
+    @apply my-2 pl-5;
+  }
+
+  .prose-ai ul { @apply list-disc; }
+  .prose-ai ol { @apply list-decimal; }
+
+  .prose-ai li {
+    @apply my-1;
+  }
+
+  .prose-ai code {
+    @apply bg-stone-200 dark:bg-stone-600 px-1.5 py-0.5 rounded text-xs font-mono;
+  }
+
+  .prose-ai pre {
+    @apply bg-stone-200 dark:bg-stone-600 p-3 rounded-lg my-2 overflow-x-auto;
+  }
+
+  .prose-ai pre code {
+    @apply bg-transparent p-0 text-xs;
+  }
+
+  .prose-ai blockquote {
+    @apply border-l-4 border-stone-300 dark:border-stone-500 pl-3 my-2 italic;
+  }
+
+  .prose-ai a {
+    @apply text-blue-600 dark:text-blue-400 underline;
+  }
+
+  .prose-ai a:hover {
+    @apply text-blue-800 dark:text-blue-300;
+  }
+
+  .prose-ai strong {
+    @apply font-semibold;
+  }
+
+  .prose-ai table {
+    @apply w-full my-2 border-collapse;
+  }
+
+  .prose-ai th, .prose-ai td {
+    @apply border border-stone-300 dark:border-stone-500 px-2 py-1 text-left;
+  }
+
+  .prose-ai th {
+    @apply bg-stone-200 dark:bg-stone-600 font-semibold;
+  }
+
+  .prose-ai hr {
+    @apply my-4 border-stone-300 dark:border-stone-500;
+  }
 }

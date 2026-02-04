@@ -4,8 +4,11 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
 import { History } from "@/components/ui/history"
 import { AgentSteps } from "@/components/ui/agent-steps"
+import { AgentPlanDisplay } from "@/components/ui/agent-plan"
+import { PermissionDialog } from "@/components/ui/permission-dialog"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
+import Markdown from "marked-react"
 import {
   useChat,
   hasAPIKey,
@@ -15,7 +18,7 @@ import {
   createConversation,
   type Conversation,
 } from "@/lib/ai"
-import type { AgentStep } from "@/lib/ai/types"
+import type { AgentStep, AgentPlan, PermissionRequest } from "@/lib/ai/types"
 import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon, Zap } from "lucide-react"
 import "./style.css"
 
@@ -27,6 +30,7 @@ interface Message {
   tabs?: Tab[]
   isStreaming?: boolean
   agentSteps?: AgentStep[]
+  plan?: AgentPlan
 }
 
 interface Tab {
@@ -64,6 +68,10 @@ function IndexSidepanel() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
 
+  // Permission request state for agent actions
+  const [permissionRequest, setPermissionRequest] = useState<PermissionRequest | null>(null)
+  const [sessionApprovals, setSessionApprovals] = useState<Set<string>>(new Set())
+
   // AI Chat hook
   const {
     messages: aiMessages,
@@ -93,6 +101,62 @@ function IndexSidepanel() {
         setCurrentConversation(newConv)
       }
     })
+  }, [])
+
+  // Listen for permission requests from the agent
+  useEffect(() => {
+    const handlePermissionRequest = (event: CustomEvent<PermissionRequest>) => {
+      // Check if this category was pre-approved for the session
+      if (sessionApprovals.has(event.detail.category)) {
+        // Auto-approve
+        window.dispatchEvent(new CustomEvent('deer:permission-response', {
+          detail: { requestId: event.detail.requestId, approved: true }
+        }))
+        return
+      }
+      setPermissionRequest(event.detail)
+    }
+
+    window.addEventListener('deer:permission-request', handlePermissionRequest as EventListener)
+    return () => {
+      window.removeEventListener('deer:permission-request', handlePermissionRequest as EventListener)
+    }
+  }, [sessionApprovals])
+
+  // Listen for pre-approvals detected from user messages
+  useEffect(() => {
+    const handlePreApprovals = (event: CustomEvent<{ categories: string[] }>) => {
+      setSessionApprovals(prev => {
+        const newSet = new Set(prev)
+        for (const category of event.detail.categories) {
+          newSet.add(category)
+        }
+        return newSet
+      })
+    }
+
+    window.addEventListener('deer:pre-approvals', handlePreApprovals as EventListener)
+    return () => {
+      window.removeEventListener('deer:pre-approvals', handlePreApprovals as EventListener)
+    }
+  }, [])
+
+  // Permission dialog handlers
+  const handlePermissionApprove = useCallback((requestId: string, allowAllSimilar?: boolean) => {
+    if (allowAllSimilar && permissionRequest) {
+      setSessionApprovals(prev => new Set(prev).add(permissionRequest.category))
+    }
+    window.dispatchEvent(new CustomEvent('deer:permission-response', {
+      detail: { requestId, approved: true, allowAllSimilar }
+    }))
+    setPermissionRequest(null)
+  }, [permissionRequest])
+
+  const handlePermissionDeny = useCallback((requestId: string, reason?: string) => {
+    window.dispatchEvent(new CustomEvent('deer:permission-response', {
+      detail: { requestId, approved: false, reason }
+    }))
+    setPermissionRequest(null)
   }, [])
 
   // Save current conversation when messages change
@@ -237,7 +301,7 @@ function IndexSidepanel() {
     return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
 
-  // Sync agent steps from AI messages to local messages in real-time
+  // Sync agent steps and plan from AI messages to local messages in real-time
   useEffect(() => {
     if (aiMessages.length > 0) {
       const lastAiMsg = aiMessages[aiMessages.length - 1]
@@ -246,13 +310,19 @@ function IndexSidepanel() {
           const lastIdx = prev.length - 1
           const lastLocalMsg = prev[lastIdx]
           // Only update if the last local message is a streaming assistant message
-          if (lastLocalMsg && !lastLocalMsg.isUser && (lastLocalMsg.isStreaming || lastLocalMsg.agentSteps?.length !== lastAiMsg.agentSteps?.length)) {
+          const needsUpdate = lastLocalMsg && !lastLocalMsg.isUser && (
+            lastLocalMsg.isStreaming ||
+            lastLocalMsg.agentSteps?.length !== lastAiMsg.agentSteps?.length ||
+            JSON.stringify(lastLocalMsg.plan) !== JSON.stringify(lastAiMsg.plan)
+          )
+          if (needsUpdate) {
             return prev.map((m, i) =>
               i === lastIdx
                 ? {
                     ...m,
                     text: lastAiMsg.content || m.text,
                     agentSteps: lastAiMsg.agentSteps,
+                    plan: lastAiMsg.plan,
                     isStreaming: !lastAiMsg.content && isAiLoading
                   }
                 : m
@@ -654,6 +724,12 @@ function IndexSidepanel() {
                       ))}
                     </div>
                   )}
+                  {/* Agent plan (for assistant messages with plan) */}
+                  {!message.isUser && message.plan && message.plan.items.length > 0 && (
+                    <div className="max-w-[90%] mb-2">
+                      <AgentPlanDisplay plan={message.plan} />
+                    </div>
+                  )}
                   {/* Agent steps (for assistant messages with steps) */}
                   {!message.isUser && message.agentSteps && message.agentSteps.length > 0 && (
                     <div className="max-w-[90%] mb-2">
@@ -667,30 +743,45 @@ function IndexSidepanel() {
                   {(message.text || message.isStreaming) && (
                     <div
                       className={cn(
-                        "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
+                        "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed",
                         message.isUser
-                          ? "bg-theme text-white"
-                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100"
+                          ? "bg-theme text-white whitespace-pre-wrap"
+                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 prose-ai"
                       )}
                     >
-                      {message.text || (message.isStreaming && !message.agentSteps?.length && (
-                        <span className="flex items-center gap-2">
-                          <span className="animate-pulse">Thinking...</span>
-                        </span>
-                      ))}
+                      {message.isUser ? (
+                        message.text
+                      ) : message.text ? (
+                        <Markdown gfm>{message.text}</Markdown>
+                      ) : (
+                        message.isStreaming && !message.agentSteps?.length && (
+                          <span className="flex items-center gap-2">
+                            <span className="animate-pulse">Thinking...</span>
+                          </span>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
               ))}
               {/* Live agent state (when running but no message yet) */}
               {isAiLoading && agentState && agentState.steps.length > 0 && (
-                <div className="flex flex-col items-start">
-                  <div className="max-w-[90%]">
-                    <AgentSteps
-                      steps={agentState.steps}
-                      isRunning={agentState.isRunning}
-                    />
-                  </div>
+                <div className="flex flex-col items-start space-y-2">
+                  {/* Only show plan here if no message has a plan yet (avoid duplicates) */}
+                  {agentState.plan && agentState.plan.items.length > 0 && !messages.some(m => m.plan) && (
+                    <div className="max-w-[90%]">
+                      <AgentPlanDisplay plan={agentState.plan} />
+                    </div>
+                  )}
+                  {/* Only show steps here if not already in a message */}
+                  {!messages.some(m => m.agentSteps && m.agentSteps.length > 0) && (
+                    <div className="max-w-[90%]">
+                      <AgentSteps
+                        steps={agentState.steps}
+                        isRunning={agentState.isRunning}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -967,6 +1058,13 @@ function IndexSidepanel() {
           </div>
         </div>
       )}
+
+      {/* Permission Dialog for Agent Actions */}
+      <PermissionDialog
+        request={permissionRequest}
+        onApprove={handlePermissionApprove}
+        onDeny={handlePermissionDeny}
+      />
 
       {/* Settings Modal */}
       <Settings

@@ -1,7 +1,7 @@
 import { generateText, jsonSchema, stepCountIs, type ModelMessage } from 'ai'
 import { createProvider } from './provider'
 import { browserTools } from './tools'
-import type { AIConfig, AgentState, AgentStep } from './types'
+import type { AIConfig, AgentState, AgentStep, AgentPlan, PlanItem } from './types'
 
 // Custom error class for rate limits
 export class RateLimitError extends Error {
@@ -55,6 +55,7 @@ async function withRateLimitRetry<T>(
 
   throw lastError || new Error('Max retries exceeded')
 }
+
 const tools = {
   navigate: {
     description: browserTools.navigate.description,
@@ -144,6 +145,45 @@ const tools = {
       } catch (error) {
         console.error('[getPageDOM] error:', error)
         // Fallback: try with scripting API if content script not available
+        return { success: false, error: `Content script not available: ${error}. Try refreshing the page.` }
+      }
+    },
+  },
+  getPageText: {
+    description: 'Get the plain text content of the page without HTML. More efficient than getPageDOM for reading articles, documentation, or long content. Use this when you need to read/understand page content rather than interact with elements.',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'Optional CSS selector to scope text extraction (e.g., "article", "main", "#content")' },
+        maxLength: { type: 'number', description: 'Maximum characters to return (default: 10000)' },
+      },
+      required: [],
+    }),
+    execute: async ({ selector, maxLength = 10000 }: { selector?: string; maxLength?: number } = {}) => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (!tab?.id) return { success: false, error: 'No active tab' }
+
+        const result = await chrome.tabs.sendMessage(tab.id, {
+          type: 'DEER_DOM',
+          action: 'getText',
+          selector,
+          maxLength,
+        })
+
+        if (result?.success) {
+          return {
+            success: true,
+            text: result.text,
+            url: result.url,
+            title: result.title,
+            truncated: result.truncated || false,
+          }
+        }
+
+        return { success: false, error: result?.error || 'No result from page' }
+      } catch (error) {
+        console.error('[getPageText] error:', error)
         return { success: false, error: `Content script not available: ${error}. Try refreshing the page.` }
       }
     },
@@ -274,78 +314,208 @@ const tools = {
     execute: async ({ ms, selector, timeout }: { ms?: number; selector?: string; timeout?: number }) =>
       browserTools.wait.execute({ ms, selector, timeout }),
   },
+  requestPermission: {
+    description: 'Request user permission before performing sensitive actions. REQUIRED before: downloading files, submitting forms with personal data, sending messages/emails, accepting terms of service, posting on social media. Returns whether permission was granted.',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        action: { type: 'string', description: 'Brief description of the action that needs permission (e.g., "Download report.pdf")' },
+        reason: { type: 'string', description: 'Why this action is needed for the task' },
+        details: { type: 'string', description: 'Optional additional details (file name, form data summary, etc.)' },
+        category: {
+          type: 'string',
+          enum: ['download', 'form_submit', 'send_message', 'accept_terms', 'social_post', 'other'],
+          description: 'Category of the sensitive action',
+        },
+      },
+      required: ['action', 'reason', 'category'],
+    }),
+    execute: async ({
+      action,
+      reason,
+      details,
+      category,
+    }: {
+      action: string
+      reason: string
+      details?: string
+      category: 'download' | 'form_submit' | 'send_message' | 'accept_terms' | 'social_post' | 'other'
+    }) => {
+      return new Promise((resolve) => {
+        const requestId = `perm_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+
+        // Dispatch event to request permission from UI
+        window.dispatchEvent(new CustomEvent('deer:permission-request', {
+          detail: { requestId, action, reason, details, category }
+        }))
+
+        // Listen for response
+        const handleResponse = (event: Event) => {
+          const customEvent = event as CustomEvent
+          if (customEvent.detail?.requestId === requestId) {
+            window.removeEventListener('deer:permission-response', handleResponse)
+
+            if (customEvent.detail.approved) {
+              resolve({
+                success: true,
+                approved: true,
+                message: `Permission granted for: ${action}`,
+              })
+            } else {
+              resolve({
+                success: true,
+                approved: false,
+                message: `Permission denied for: ${action}`,
+                reason: customEvent.detail.reason || 'User declined',
+              })
+            }
+          }
+        }
+
+        window.addEventListener('deer:permission-response', handleResponse)
+
+        // Timeout after 60 seconds
+        setTimeout(() => {
+          window.removeEventListener('deer:permission-response', handleResponse)
+          resolve({
+            success: false,
+            approved: false,
+            message: 'Permission request timed out - user did not respond',
+          })
+        }, 60000)
+      })
+    },
+  },
 }
 
-const PLANNING_SYSTEM_PROMPT = `You are Deer, an intelligent browser automation agent. Before taking any actions, you create a brief plan.
+// Micro-planning prompt - plans only 2 steps at a time based on current state
+const MICRO_PLANNING_PROMPT = `You are Deer, a browser automation agent. You work in small incremental steps.
 
-Given a task, analyze what needs to be done and create a concise plan with numbered steps. Keep it brief (3-6 steps max).
+Given the user's task and the CURRENT page state (DOM/screenshot), plan exactly 2 small concrete actions.
+
+Rules:
+- Plan ONLY 2 steps - no more
+- Steps must be specific and actionable (e.g., "Click the search button", "Type 'query' in search box")
+- Base your plan on what you can ACTUALLY see in the current DOM/screenshot
+- If task needs permission (downloads, forms, messages, terms), note it
 
 Format your response as:
-**Plan:**
-1. [First action]
-2. [Second action]
-3. [etc.]
+**Next Steps:**
+1. [specific action based on current page]
+2. [next specific action]
 
-Do NOT use any tools yet - just create the plan. Be specific about what you'll do.`
+If the task appears COMPLETE based on current state, respond with:
+**Task Complete**
+[Brief summary of what was accomplished]
 
-const AGENT_SYSTEM_PROMPT = `You are Deer, an intelligent browser automation agent. Your job is to help users accomplish tasks on web pages.
+Do NOT use tools in this response - just plan.`
 
-You have already created a plan. Now execute it step by step.
+// Execution prompt - executes the 2 planned steps
+const EXECUTION_PROMPT = `You are Deer, a browser automation agent. Execute the planned steps.
 
-## CRITICAL WORKFLOW
-For ANY task that involves interacting with a web page, you MUST follow this workflow:
+## WORKFLOW
+1. getPageDOM → find elements by [ref=ref_N] → act → verify
 
-1. FIRST: Call getPageDOM to see the page structure and available elements
-2. ANALYZE: Look at the DOM tree to find the element(s) you need
-3. ACT: Use clickElement, typeInElement, or scrollToElement with the element ref
-4. VERIFY: After each action, call getPageDOM again to see the result
-5. CONTINUE: Keep taking actions until the task is complete
+## TOOLS
+- getPageDOM: Get page structure with refs. CALL THIS FIRST.
+- clickElement/typeInElement/scrollToElement: Use refs from getPageDOM
+- navigate, createTab/closeTab/switchTab, screenshot, wait
+- requestPermission: Required before sensitive actions
 
-## AVAILABLE TOOLS
-- getPageDOM: Get the page structure as an accessibility tree. ALWAYS call this first!
-- clickElement: Click an element by ref (from getPageDOM)
-- typeInElement: Type text into an element by ref
-- scrollToElement: Scroll to an element by ref
-- navigate: Go to a URL
-- createTab/closeTab/getTabs/switchTab: Manage browser tabs
-- screenshot: Capture a screenshot
-- wait: Wait for time or changes
+## DOM FORMAT
+Elements have refs like: button "Sign In" [ref=ref_1]
+Use the ref value as elementId.
 
-## DOM TREE FORMAT
-The DOM tree shows elements in YAML-like format with stable references:
-- button "Sign In" [ref=ref_1]
-- textbox "Email address" [ref=ref_2] placeholder="Enter email"
-- link "Forgot password?" [ref=ref_3] href="/forgot"
+## SECURITY
+PROHIBITED: Passwords, credit cards, SSN, API keys, purchases, account creation
+REQUIRE PERMISSION: Downloads, forms with personal data, sending messages, accepting terms
 
-Use the ref value (e.g., "ref_1", "ref_2") as the elementId for click/type/scroll actions.
-
-## IMPORTANT RULES
-- NEVER guess element refs - always get them from getPageDOM first
-- After clicking something that changes the page, call getPageDOM again
-- If an element is not visible, try scrollToElement first
-- Element refs are stable across DOM changes if the element still exists
-- Be persistent - if one approach fails, try another
-- Report your progress after each action
-
-## EXAMPLE
-User: "Log into my account with email test@example.com"
-
-1. First I'll get the page DOM to see what's available...
-   [calls getPageDOM]
-2. I see a textbox [ref=ref_5] for email. Let me type the email...
-   [calls typeInElement with elementId="ref_5", text="test@example.com"]
-3. Now let me check the page again to find the submit button...
-   [calls getPageDOM]
-4. I see a button [ref=ref_8] for Sign In. Let me click it...
-   [calls clickElement with elementId="ref_8"]
-5. Done! The login form was submitted.
-
-Always think step by step and keep working until the task is complete!`
+## CRITICAL
+- Execute ONLY the 2 planned steps, then STOP
+- Always getPageDOM first to find current refs
+- Never guess refs - get them from getPageDOM`
 
 export interface AgentCallbacks {
   onStep?: (step: AgentStep) => void
   onStateChange?: (state: AgentState) => void
   onText?: (text: string) => void
+  onPlan?: (plan: AgentPlan) => void
+  onPlanUpdate?: (plan: AgentPlan) => void
+}
+
+// Parse micro-plan (2 steps) from text
+function parseMicroPlan(text: string): { steps: string[], isComplete: boolean, summary?: string } {
+  // Check if task is complete
+  if (text.includes('**Task Complete**') || text.toLowerCase().includes('task complete')) {
+    const summaryMatch = text.match(/\*\*Task Complete\*\*\s*\n?([\s\S]*)/i)
+    return {
+      steps: [],
+      isComplete: true,
+      summary: summaryMatch?.[1]?.trim() || 'Task completed successfully.'
+    }
+  }
+
+  // Parse the 2 steps
+  const stepsMatch = text.match(/\*?\*?Next Steps:?\*?\*?\s*\n((?:\d+\.\s+.+(?:\n|$))+)/i)
+  if (!stepsMatch) {
+    // Try alternative format
+    const numberedMatch = text.match(/(\d+\.\s+.+(?:\n\d+\.\s+.+)*)/m)
+    if (numberedMatch) {
+      const items = [...numberedMatch[1].matchAll(/\d+\.\s+(.+?)(?=\n\d+\.|\n*$)/g)]
+      return {
+        steps: items.map(m => m[1].trim()).slice(0, 2),
+        isComplete: false
+      }
+    }
+    return { steps: [], isComplete: false }
+  }
+
+  const items = [...stepsMatch[1].matchAll(/\d+\.\s+(.+?)(?=\n\d+\.|\n*$)/g)]
+  return {
+    steps: items.map(m => m[1].trim()).slice(0, 2),
+    isComplete: false
+  }
+}
+
+// Get current page state for evaluation
+async function getCurrentPageState(): Promise<{ dom: string, url: string, title: string }> {
+  // Get basic tab info first - this always works
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const url = tab?.url || ''
+  const title = tab?.title || ''
+
+  // Check if this is a restricted page where content scripts can't run
+  if (!tab?.id || url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:')) {
+    return {
+      dom: '(Cannot read page content - this is a browser internal page. Navigate to a regular website first.)',
+      url,
+      title,
+    }
+  }
+
+  // Try to get DOM from content script
+  try {
+    const result = await chrome.tabs.sendMessage(tab.id, {
+      type: 'DEER_DOM',
+      action: 'serialize',
+      filter: 'interactive',
+    })
+
+    let dom = result?.pageContent || ''
+    if (dom.length > MAX_DOM_CHARS) {
+      dom = dom.substring(0, MAX_DOM_CHARS) + '\n... (truncated)'
+    }
+
+    return { dom, url, title }
+  } catch (error) {
+    // Content script not ready - this is normal for new tabs or pages still loading
+    console.log('[getCurrentPageState] Content script not ready, returning basic info')
+    return {
+      dom: '(Page content not yet available - the page may still be loading. Try using navigate tool to go to the target URL.)',
+      url,
+      title,
+    }
+  }
 }
 
 export class BrowserAgent {
@@ -353,6 +523,8 @@ export class BrowserAgent {
   private state: AgentState
   private callbacks: AgentCallbacks
   private stepCounter = 0
+  private plan: AgentPlan | null = null
+  private completedPlanItems: PlanItem[] = []
 
   constructor(config: AIConfig, callbacks: AgentCallbacks = {}) {
     this.config = config
@@ -387,160 +559,269 @@ export class BrowserAgent {
     }
   }
 
-  async run(messages: ModelMessage[], maxSteps = 20): Promise<string> {
+  // Update the plan display with current micro-plan + completed items
+  private updatePlanDisplay(currentSteps: string[], activeIndex: number = 0) {
+    // Build plan items: completed items + current micro-plan items
+    const items: PlanItem[] = [
+      ...this.completedPlanItems,
+      ...currentSteps.map((text, i) => ({
+        id: `current-${i}`,
+        text,
+        status: (i < activeIndex ? 'completed' : i === activeIndex ? 'in_progress' : 'pending') as PlanItem['status']
+      }))
+    ]
+
+    this.plan = { items }
+    this.state.plan = this.plan
+    this.callbacks.onPlanUpdate?.(this.plan)
+  }
+
+  // Mark current micro-plan step as complete and move to next
+  private completeCurrentStep(stepText: string) {
+    // Add to completed items
+    this.completedPlanItems.push({
+      id: `completed-${this.completedPlanItems.length}`,
+      text: stepText,
+      status: 'completed'
+    })
+  }
+
+  async run(messages: ModelMessage[], maxIterations = 10): Promise<string> {
+    this.plan = null
+    this.completedPlanItems = []
+
     this.updateState({
       isRunning: true,
-      currentStep: 'Planning...',
+      currentStep: 'Starting...',
       steps: [],
+      plan: undefined,
     })
 
     try {
       const model = createProvider(this.config)
+      let iteration = 0
+      let finalSummary = ''
 
-      // Phase 1: Planning - create a brief plan first (no tools)
-      const planStep = this.addStep({
-        action: 'Creating plan...',
-        status: 'running',
-      })
+      // Main iterative loop
+      while (iteration < maxIterations) {
+        iteration++
+        console.log(`[Agent] Starting iteration ${iteration}/${maxIterations}`)
 
-      let planText = ''
-      try {
-        const planResult = await withRateLimitRetry(() => generateText({
-          model,
-          system: PLANNING_SYSTEM_PROMPT,
-          messages,
-          maxSteps: 1, // Single response, no tools
-        }))
-        planText = planResult.text || ''
-
-        this.updateStep(planStep.id, {
-          action: 'Plan created',
-          status: 'completed',
-          result: planText,
+        // Phase 1: Observe current state
+        this.updateState({ currentStep: 'Observing page...' })
+        const observeStep = this.addStep({
+          action: 'Observing current page state...',
+          status: 'running',
         })
 
-        // Emit plan as text for display
-        if (planText) {
-          this.callbacks.onText?.(planText + '\n\n')
-        }
-      } catch (planError) {
-        // If planning fails, continue without plan
-        console.warn('[Agent] Planning failed, continuing without plan:', planError)
-        this.updateStep(planStep.id, {
-          action: 'Planning skipped',
+        const pageState = await getCurrentPageState()
+
+        this.updateStep(observeStep.id, {
+          action: `Observed: ${pageState.title || pageState.url || 'current page'}`,
           status: 'completed',
-          result: 'Proceeding directly to execution',
+          result: `URL: ${pageState.url}\nElements found: ${pageState.dom.length > 0 ? 'yes' : 'no'}`,
         })
-      }
 
-      // Small delay between planning and execution to help with rate limits
-      await new Promise(resolve => setTimeout(resolve, 1000))
+        // Phase 2: Plan next 2 steps based on current state
+        this.updateState({ currentStep: 'Planning next steps...' })
+        const planStep = this.addStep({
+          action: 'Planning next actions...',
+          status: 'running',
+        })
 
-      this.updateState({ currentStep: 'Executing...' })
+        // Build context with task + current state
+        const planningMessages: ModelMessage[] = [
+          ...messages,
+          {
+            role: 'user' as const,
+            content: `Current page state:
+URL: ${pageState.url}
+Title: ${pageState.title}
 
-      // Phase 2: Execution - now execute with tools
-      // Include the plan in the context if we have one
-      const executionMessages: ModelMessage[] = planText
-        ? [
-            ...messages,
-            { role: 'assistant' as const, content: planText },
-            { role: 'user' as const, content: 'Now execute this plan step by step.' },
-          ]
-        : messages
+Interactive elements on page:
+${pageState.dom || '(Unable to read page - may need to navigate first)'}
 
-      // Wrap generateText with rate limit retry handling
-      const result = await withRateLimitRetry(() => generateText({
-        model,
-        system: AGENT_SYSTEM_PROMPT,
-        messages: executionMessages,
-        tools,
-        stopWhen: stepCountIs(maxSteps), // Stop after maxSteps iterations
-        toolChoice: 'auto', // Let the model decide when to use tools
-        onStepFinish: ({ text, toolCalls, toolResults }) => {
-          console.log('[Agent] onStepFinish:', {
-            text,
-            toolCallsCount: toolCalls?.length,
-            toolResultsCount: toolResults?.length,
-            toolCalls: toolCalls?.map((tc: any) => ({ toolName: tc.toolName, toolCallId: tc.toolCallId })),
-            toolResults: toolResults?.map((tr: any) => ({ toolCallId: tr.toolCallId, hasResult: tr.result !== undefined }))
+${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlanItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n')}\n\n` : ''}What are the next 2 specific steps to complete the task?`
+          }
+        ]
+
+        let microPlan: { steps: string[], isComplete: boolean, summary?: string }
+
+        try {
+          const planResult = await withRateLimitRetry(() => generateText({
+            model,
+            system: MICRO_PLANNING_PROMPT,
+            messages: planningMessages,
+            stopWhen: stepCountIs(1),
+          }))
+
+          const planText = planResult.text || ''
+          microPlan = parseMicroPlan(planText)
+
+          this.updateStep(planStep.id, {
+            action: microPlan.isComplete ? 'Task complete!' : `Planned: ${microPlan.steps.length} steps`,
+            status: 'completed',
+            result: planText,
           })
 
-          // Handle text output
-          if (text) {
-            this.callbacks.onText?.(text)
+          // Emit plan text
+          if (planText) {
+            this.callbacks.onText?.(planText + '\n\n')
           }
+        } catch (planError) {
+          console.error('[Agent] Planning failed:', planError)
+          this.updateStep(planStep.id, {
+            action: 'Planning failed',
+            status: 'failed',
+            error: String(planError),
+          })
+          throw planError
+        }
 
-          // Handle tool calls - build a map of toolCallId -> result for proper matching
-          if (toolCalls && toolCalls.length > 0) {
-            // Build result lookup map by toolCallId
-            const resultMap = new Map<string, any>()
-            if (toolResults && Array.isArray(toolResults)) {
-              for (const tr of toolResults as any[]) {
-                if (tr.toolCallId) {
-                  resultMap.set(tr.toolCallId, tr)
-                }
+        // Check if task is complete
+        if (microPlan.isComplete) {
+          finalSummary = microPlan.summary || 'Task completed.'
+          // Mark all remaining as complete
+          this.updatePlanDisplay([], 0)
+          break
+        }
+
+        // No steps planned - something went wrong
+        if (microPlan.steps.length === 0) {
+          console.warn('[Agent] No steps planned, ending iteration')
+          finalSummary = 'Unable to determine next steps.'
+          break
+        }
+
+        // Update plan display with current micro-plan
+        this.updatePlanDisplay(microPlan.steps, 0)
+
+        // Phase 3: Execute the 2 planned steps
+        this.updateState({ currentStep: 'Executing...' })
+
+        // Build execution context
+        const executionMessages: ModelMessage[] = [
+          ...messages,
+          {
+            role: 'assistant' as const,
+            content: `**Next Steps:**\n${microPlan.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+          },
+          {
+            role: 'user' as const,
+            content: 'Execute these 2 steps now. Start by calling getPageDOM to see current elements.'
+          }
+        ]
+
+        let stepsExecuted = 0
+
+        try {
+          await withRateLimitRetry(() => generateText({
+            model,
+            system: EXECUTION_PROMPT,
+            messages: executionMessages,
+            tools,
+            stopWhen: stepCountIs(6), // Limited steps per micro-plan execution
+            toolChoice: 'auto',
+            onStepFinish: ({ text, toolCalls, toolResults }) => {
+              // Handle text output
+              if (text) {
+                this.callbacks.onText?.(text)
               }
-            }
 
-            for (const tc of toolCalls as any[]) {
-              const step = this.addStep({
-                action: `${tc.toolName}: ${JSON.stringify(tc.args)}`,
-                status: 'running',
-              })
-
-              // Look up result by toolCallId
-              const correspondingResult = resultMap.get(tc.toolCallId)
-
-              console.log('[Agent] Tool result for', tc.toolName, '(id:', tc.toolCallId, '):',
-                correspondingResult ? 'found' : 'not found',
-                correspondingResult?.result !== undefined ? 'has result' : 'no result value'
-              )
-
-              if (correspondingResult && correspondingResult.result !== undefined) {
-                const result = correspondingResult.result
-                const resultStr = typeof result === 'object'
-                  ? JSON.stringify(result)
-                  : String(result)
-
-                // Determine status based on result
-                let status: 'completed' | 'failed' = 'completed'
-                let errorMsg: string | undefined
-
-                if (typeof result === 'object' && result !== null) {
-                  if (result.success === false) {
-                    status = 'failed'
-                    errorMsg = result.error || result.message || 'Action failed'
-                  } else if (result.error) {
-                    status = 'failed'
-                    errorMsg = result.error
+              // Handle tool calls
+              if (toolCalls && toolCalls.length > 0) {
+                const resultMap = new Map<string, any>()
+                if (toolResults && Array.isArray(toolResults)) {
+                  for (const tr of toolResults as any[]) {
+                    if (tr.toolCallId) {
+                      resultMap.set(tr.toolCallId, tr)
+                    }
                   }
                 }
 
-                this.updateStep(step.id, {
-                  status,
-                  result: resultStr.slice(0, 500), // Truncate long results for display
-                  error: errorMsg,
-                })
-              } else {
-                // No result found - mark as completed (tool executed but no return value)
-                this.updateStep(step.id, {
-                  status: 'completed',
-                  result: 'Executed successfully',
-                })
-              }
-            }
-          }
-        },
-      }))
+                for (const tc of toolCalls as any[]) {
+                  const step = this.addStep({
+                    action: `${tc.toolName}: ${JSON.stringify(tc.args)}`,
+                    status: 'running',
+                  })
 
+                  const correspondingResult = resultMap.get(tc.toolCallId)
+
+                  if (correspondingResult && correspondingResult.result !== undefined) {
+                    const result = correspondingResult.result
+                    const resultStr = typeof result === 'object'
+                      ? JSON.stringify(result)
+                      : String(result)
+
+                    let status: 'completed' | 'failed' = 'completed'
+                    let errorMsg: string | undefined
+
+                    if (typeof result === 'object' && result !== null) {
+                      if (result.success === false) {
+                        status = 'failed'
+                        errorMsg = result.error || result.message || 'Action failed'
+                      } else if (result.error) {
+                        status = 'failed'
+                        errorMsg = result.error
+                      }
+                    }
+
+                    // Check for screenshot
+                    const hasScreenshot = typeof result === 'object' && result !== null &&
+                      'dataUrl' in result && typeof (result as any).dataUrl === 'string' &&
+                      (result as any).dataUrl.startsWith('data:image')
+
+                    this.updateStep(step.id, {
+                      status,
+                      result: hasScreenshot ? resultStr : resultStr.slice(0, 500),
+                      screenshot: hasScreenshot ? (result as any).dataUrl : undefined,
+                      error: errorMsg,
+                    })
+
+                    // Track significant actions to know when a plan step is done
+                    const toolName = tc.toolName.toLowerCase()
+                    const significantActions = ['navigate', 'createtab', 'clickelement', 'typeinelement', 'click', 'type']
+                    if (status === 'completed' && significantActions.includes(toolName)) {
+                      stepsExecuted++
+                      // Update plan display to show progress
+                      if (stepsExecuted <= microPlan.steps.length) {
+                        // Complete the step that was just executed
+                        if (stepsExecuted === 1 && microPlan.steps[0]) {
+                          this.completeCurrentStep(microPlan.steps[0])
+                          this.updatePlanDisplay(microPlan.steps.slice(1), 0)
+                        } else if (stepsExecuted === 2 && microPlan.steps[1]) {
+                          this.completeCurrentStep(microPlan.steps[1])
+                          this.updatePlanDisplay([], 0)
+                        }
+                      }
+                    }
+                  } else {
+                    this.updateStep(step.id, {
+                      status: 'completed',
+                      result: 'Executed successfully',
+                    })
+                  }
+                }
+              }
+            },
+          }))
+        } catch (execError) {
+          console.error('[Agent] Execution failed:', execError)
+          // Continue to next iteration anyway - might recover
+        }
+
+        // Small delay before next iteration
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
+      // Final state
       this.updateState({
         isRunning: false,
         currentStep: 'Done',
+        plan: this.plan || undefined,
       })
 
-      // Combine all text outputs
-      const fullText = result.text || 'Task completed.'
-      return fullText
+      return finalSummary || 'Task completed.'
     } catch (error) {
       console.error('Agent error:', error)
       this.updateState({
@@ -548,11 +829,10 @@ export class BrowserAgent {
         currentStep: 'Error',
       })
 
-      // Convert rate limit errors to a more user-friendly error
       if (isRateLimitError(error)) {
         throw new RateLimitError(
-          'Rate limit reached. The API is receiving too many requests. Please wait a moment and try again.',
-          60000 // Suggest waiting 60 seconds
+          'Rate limit reached. Please wait a moment and try again.',
+          60000
         )
       }
 
