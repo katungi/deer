@@ -5,8 +5,10 @@ import { Settings } from "@/components/ui/settings"
 import { History } from "@/components/ui/history"
 import { AgentSteps } from "@/components/ui/agent-steps"
 import { AgentPlanDisplay } from "@/components/ui/agent-plan"
+import { PermissionDialog } from "@/components/ui/permission-dialog"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
+import Markdown from "marked-react"
 import {
   useChat,
   hasAPIKey,
@@ -16,7 +18,7 @@ import {
   createConversation,
   type Conversation,
 } from "@/lib/ai"
-import type { AgentStep, AgentPlan } from "@/lib/ai/types"
+import type { AgentStep, AgentPlan, PermissionRequest } from "@/lib/ai/types"
 import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon, Zap } from "lucide-react"
 import "./style.css"
 
@@ -66,6 +68,10 @@ function IndexSidepanel() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
 
+  // Permission request state for agent actions
+  const [permissionRequest, setPermissionRequest] = useState<PermissionRequest | null>(null)
+  const [sessionApprovals, setSessionApprovals] = useState<Set<string>>(new Set())
+
   // AI Chat hook
   const {
     messages: aiMessages,
@@ -95,6 +101,62 @@ function IndexSidepanel() {
         setCurrentConversation(newConv)
       }
     })
+  }, [])
+
+  // Listen for permission requests from the agent
+  useEffect(() => {
+    const handlePermissionRequest = (event: CustomEvent<PermissionRequest>) => {
+      // Check if this category was pre-approved for the session
+      if (sessionApprovals.has(event.detail.category)) {
+        // Auto-approve
+        window.dispatchEvent(new CustomEvent('deer:permission-response', {
+          detail: { requestId: event.detail.requestId, approved: true }
+        }))
+        return
+      }
+      setPermissionRequest(event.detail)
+    }
+
+    window.addEventListener('deer:permission-request', handlePermissionRequest as EventListener)
+    return () => {
+      window.removeEventListener('deer:permission-request', handlePermissionRequest as EventListener)
+    }
+  }, [sessionApprovals])
+
+  // Listen for pre-approvals detected from user messages
+  useEffect(() => {
+    const handlePreApprovals = (event: CustomEvent<{ categories: string[] }>) => {
+      setSessionApprovals(prev => {
+        const newSet = new Set(prev)
+        for (const category of event.detail.categories) {
+          newSet.add(category)
+        }
+        return newSet
+      })
+    }
+
+    window.addEventListener('deer:pre-approvals', handlePreApprovals as EventListener)
+    return () => {
+      window.removeEventListener('deer:pre-approvals', handlePreApprovals as EventListener)
+    }
+  }, [])
+
+  // Permission dialog handlers
+  const handlePermissionApprove = useCallback((requestId: string, allowAllSimilar?: boolean) => {
+    if (allowAllSimilar && permissionRequest) {
+      setSessionApprovals(prev => new Set(prev).add(permissionRequest.category))
+    }
+    window.dispatchEvent(new CustomEvent('deer:permission-response', {
+      detail: { requestId, approved: true, allowAllSimilar }
+    }))
+    setPermissionRequest(null)
+  }, [permissionRequest])
+
+  const handlePermissionDeny = useCallback((requestId: string, reason?: string) => {
+    window.dispatchEvent(new CustomEvent('deer:permission-response', {
+      detail: { requestId, approved: false, reason }
+    }))
+    setPermissionRequest(null)
   }, [])
 
   // Save current conversation when messages change
@@ -681,30 +743,38 @@ function IndexSidepanel() {
                   {(message.text || message.isStreaming) && (
                     <div
                       className={cn(
-                        "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap",
+                        "max-w-[85%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed",
                         message.isUser
-                          ? "bg-theme text-white"
-                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100"
+                          ? "bg-theme text-white whitespace-pre-wrap"
+                          : "bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 prose-ai"
                       )}
                     >
-                      {message.text || (message.isStreaming && !message.agentSteps?.length && (
-                        <span className="flex items-center gap-2">
-                          <span className="animate-pulse">Thinking...</span>
-                        </span>
-                      ))}
+                      {message.isUser ? (
+                        message.text
+                      ) : message.text ? (
+                        <Markdown gfm>{message.text}</Markdown>
+                      ) : (
+                        message.isStreaming && !message.agentSteps?.length && (
+                          <span className="flex items-center gap-2">
+                            <span className="animate-pulse">Thinking...</span>
+                          </span>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
               ))}
               {/* Live agent state (when running but no message yet) */}
-              {isAiLoading && agentState && (agentState.steps.length > 0 || agentState.plan) && (
+              {isAiLoading && agentState && agentState.steps.length > 0 && (
                 <div className="flex flex-col items-start space-y-2">
-                  {agentState.plan && agentState.plan.items.length > 0 && (
+                  {/* Only show plan here if no message has a plan yet (avoid duplicates) */}
+                  {agentState.plan && agentState.plan.items.length > 0 && !messages.some(m => m.plan) && (
                     <div className="max-w-[90%]">
                       <AgentPlanDisplay plan={agentState.plan} />
                     </div>
                   )}
-                  {agentState.steps.length > 0 && (
+                  {/* Only show steps here if not already in a message */}
+                  {!messages.some(m => m.agentSteps && m.agentSteps.length > 0) && (
                     <div className="max-w-[90%]">
                       <AgentSteps
                         steps={agentState.steps}
@@ -988,6 +1058,13 @@ function IndexSidepanel() {
           </div>
         </div>
       )}
+
+      {/* Permission Dialog for Agent Actions */}
+      <PermissionDialog
+        request={permissionRequest}
+        onApprove={handlePermissionApprove}
+        onDeny={handlePermissionDeny}
+      />
 
       {/* Settings Modal */}
       <Settings

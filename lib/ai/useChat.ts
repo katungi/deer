@@ -22,6 +22,83 @@ function isRateLimitError(error: unknown): boolean {
 
 const CHAT_SYSTEM_PROMPT = `You are Deer, a friendly and helpful browser assistant. You help users with questions, explanations, and general conversation. Be concise, clear, and helpful.`
 
+// Pre-approval detection patterns for permission categories
+const PRE_APPROVAL_PATTERNS: { category: string; patterns: RegExp[] }[] = [
+  {
+    category: 'download',
+    patterns: [
+      /\b(go ahead|you may|i authorize|you have permission|feel free to|please)\b.*\bdownload/i,
+      /\bdownload\b.*\b(without asking|no confirmation|don't ask)/i,
+    ],
+  },
+  {
+    category: 'form_submit',
+    patterns: [
+      /\b(go ahead|you may|i authorize|you have permission|feel free to|please)\b.*\b(submit|send|fill( out)?)\b.*\bform/i,
+      /\bsubmit\b.*\b(without asking|no confirmation|don't ask)/i,
+    ],
+  },
+  {
+    category: 'send_message',
+    patterns: [
+      /\b(go ahead|you may|i authorize|you have permission|feel free to|please)\b.*\b(send|email|message)/i,
+      /\b(send|email)\b.*\b(without asking|no confirmation|don't ask)/i,
+    ],
+  },
+  {
+    category: 'accept_terms',
+    patterns: [
+      /\b(go ahead|you may|i authorize|you have permission|feel free to|please)\b.*\b(accept|agree)\b.*\b(terms|conditions|policy)/i,
+      /\baccept\b.*\b(without asking|no confirmation|don't ask)/i,
+    ],
+  },
+  {
+    category: 'social_post',
+    patterns: [
+      /\b(go ahead|you may|i authorize|you have permission|feel free to|please)\b.*\b(post|publish|share)\b/i,
+      /\b(post|publish)\b.*\b(without asking|no confirmation|don't ask)/i,
+    ],
+  },
+]
+
+// Detect pre-approved categories from user message
+function detectPreApprovals(message: string): string[] {
+  const approvals: string[] = []
+
+  // Check for general "no confirmation needed" pattern
+  const generalApproval = /\b(no confirmation|don't ask|you have (full )?permission|i (fully )?authorize|go ahead (and|with))\b/i.test(message)
+
+  for (const { category, patterns } of PRE_APPROVAL_PATTERNS) {
+    for (const pattern of patterns) {
+      if (pattern.test(message)) {
+        approvals.push(category)
+        break
+      }
+    }
+  }
+
+  // If general approval detected and message mentions specific actions, add those
+  if (generalApproval) {
+    if (/\bdownload/i.test(message) && !approvals.includes('download')) {
+      approvals.push('download')
+    }
+    if (/\b(submit|form)/i.test(message) && !approvals.includes('form_submit')) {
+      approvals.push('form_submit')
+    }
+    if (/\b(send|email|message)/i.test(message) && !approvals.includes('send_message')) {
+      approvals.push('send_message')
+    }
+    if (/\b(accept|terms|agree)/i.test(message) && !approvals.includes('accept_terms')) {
+      approvals.push('accept_terms')
+    }
+    if (/\b(post|publish|share)/i.test(message) && !approvals.includes('social_post')) {
+      approvals.push('social_post')
+    }
+  }
+
+  return approvals
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -119,6 +196,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       const themeColorId = localStorage.getItem('deer-theme-color') || 'rose'
       const themeColorHex = themeColors.find(c => c.id === themeColorId)?.value || '#e11d48'
       showAgentGlow({ color: themeColorHex, pulse: true })
+
+      // Detect pre-approvals in user message and notify sidepanel
+      const preApprovals = detectPreApprovals(content)
+      if (preApprovals.length > 0) {
+        window.dispatchEvent(new CustomEvent('deer:pre-approvals', {
+          detail: { categories: preApprovals }
+        }))
+      }
     }
 
     try {
