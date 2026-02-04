@@ -53,7 +53,10 @@ export interface AgentState {
   isRunning: boolean
   currentStep: string
   steps: AgentStep[]
+  plan?: AgentPlan
 }
+
+export type StepCategory = 'planning' | 'navigation' | 'interaction' | 'search' | 'other'
 
 export interface AgentStep {
   id: string
@@ -61,4 +64,19 @@ export interface AgentStep {
   status: 'pending' | 'running' | 'completed' | 'failed'
   result?: unknown
   error?: string
+  // Enhanced fields for timeline UI
+  screenshot?: string        // base64 screenshot if captured
+  description?: string       // Human-readable description (e.g., "Navigating to Komoot")
+  category?: StepCategory    // Step category for grouping
+}
+
+// Plan types for checklist rendering
+export interface AgentPlan {
+  items: PlanItem[]
+}
+
+export interface PlanItem {
+  id: string
+  text: string
+  status: 'pending' | 'in_progress' | 'completed'
 }

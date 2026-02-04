@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Settings } from "@/components/ui/settings"
 import { History } from "@/components/ui/history"
 import { AgentSteps } from "@/components/ui/agent-steps"
+import { AgentPlanDisplay } from "@/components/ui/agent-plan"
 import { SendIcon } from "@/components/icons"
 import { cn } from "@/lib/utils"
 import {
@@ -15,7 +16,7 @@ import {
   createConversation,
   type Conversation,
 } from "@/lib/ai"
-import type { AgentStep } from "@/lib/ai/types"
+import type { AgentStep, AgentPlan } from "@/lib/ai/types"
 import { Plus, Settings as SettingsIcon, Camera, Mic, Maximize2, Lightbulb, FileText, Search, Square, AlertCircle, History as HistoryIcon, Zap } from "lucide-react"
 import "./style.css"
 
@@ -27,6 +28,7 @@ interface Message {
   tabs?: Tab[]
   isStreaming?: boolean
   agentSteps?: AgentStep[]
+  plan?: AgentPlan
 }
 
 interface Tab {
@@ -237,7 +239,7 @@ function IndexSidepanel() {
     return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
 
-  // Sync agent steps from AI messages to local messages in real-time
+  // Sync agent steps and plan from AI messages to local messages in real-time
   useEffect(() => {
     if (aiMessages.length > 0) {
       const lastAiMsg = aiMessages[aiMessages.length - 1]
@@ -246,13 +248,19 @@ function IndexSidepanel() {
           const lastIdx = prev.length - 1
           const lastLocalMsg = prev[lastIdx]
           // Only update if the last local message is a streaming assistant message
-          if (lastLocalMsg && !lastLocalMsg.isUser && (lastLocalMsg.isStreaming || lastLocalMsg.agentSteps?.length !== lastAiMsg.agentSteps?.length)) {
+          const needsUpdate = lastLocalMsg && !lastLocalMsg.isUser && (
+            lastLocalMsg.isStreaming ||
+            lastLocalMsg.agentSteps?.length !== lastAiMsg.agentSteps?.length ||
+            JSON.stringify(lastLocalMsg.plan) !== JSON.stringify(lastAiMsg.plan)
+          )
+          if (needsUpdate) {
             return prev.map((m, i) =>
               i === lastIdx
                 ? {
                     ...m,
                     text: lastAiMsg.content || m.text,
                     agentSteps: lastAiMsg.agentSteps,
+                    plan: lastAiMsg.plan,
                     isStreaming: !lastAiMsg.content && isAiLoading
                   }
                 : m
@@ -654,6 +662,12 @@ function IndexSidepanel() {
                       ))}
                     </div>
                   )}
+                  {/* Agent plan (for assistant messages with plan) */}
+                  {!message.isUser && message.plan && message.plan.items.length > 0 && (
+                    <div className="max-w-[90%] mb-2">
+                      <AgentPlanDisplay plan={message.plan} />
+                    </div>
+                  )}
                   {/* Agent steps (for assistant messages with steps) */}
                   {!message.isUser && message.agentSteps && message.agentSteps.length > 0 && (
                     <div className="max-w-[90%] mb-2">
@@ -683,14 +697,21 @@ function IndexSidepanel() {
                 </div>
               ))}
               {/* Live agent state (when running but no message yet) */}
-              {isAiLoading && agentState && agentState.steps.length > 0 && (
-                <div className="flex flex-col items-start">
-                  <div className="max-w-[90%]">
-                    <AgentSteps
-                      steps={agentState.steps}
-                      isRunning={agentState.isRunning}
-                    />
-                  </div>
+              {isAiLoading && agentState && (agentState.steps.length > 0 || agentState.plan) && (
+                <div className="flex flex-col items-start space-y-2">
+                  {agentState.plan && agentState.plan.items.length > 0 && (
+                    <div className="max-w-[90%]">
+                      <AgentPlanDisplay plan={agentState.plan} />
+                    </div>
+                  )}
+                  {agentState.steps.length > 0 && (
+                    <div className="max-w-[90%]">
+                      <AgentSteps
+                        steps={agentState.steps}
+                        isRunning={agentState.isRunning}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

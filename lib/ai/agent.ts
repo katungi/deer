@@ -1,7 +1,7 @@
 import { generateText, jsonSchema, stepCountIs, type ModelMessage } from 'ai'
 import { createProvider } from './provider'
 import { browserTools } from './tools'
-import type { AIConfig, AgentState, AgentStep } from './types'
+import type { AIConfig, AgentState, AgentStep, AgentPlan, PlanItem } from './types'
 
 // Custom error class for rate limits
 export class RateLimitError extends Error {
@@ -346,6 +346,34 @@ export interface AgentCallbacks {
   onStep?: (step: AgentStep) => void
   onStateChange?: (state: AgentState) => void
   onText?: (text: string) => void
+  onPlan?: (plan: AgentPlan) => void
+  onPlanUpdate?: (plan: AgentPlan) => void
+}
+
+// Parse plan from markdown text
+function parsePlanFromText(text: string): AgentPlan | null {
+  // Look for plan format: **Plan:**\n1. ...\n2. ... or similar variations
+  const planMatch = text.match(/\*?\*?Plan:?\*?\*?\s*\n((?:\d+\.\s+.+(?:\n|$))+)/i)
+
+  if (!planMatch) return null
+
+  const planText = planMatch[1]
+
+  // Extract numbered items
+  const itemMatches = [...planText.matchAll(/(\d+)\.\s+(.+?)(?=\n\d+\.|\n*$)/g)]
+  const items: PlanItem[] = []
+
+  for (const match of itemMatches) {
+    items.push({
+      id: `plan-${match[1]}`,
+      text: match[2].trim(),
+      status: 'pending'
+    })
+  }
+
+  if (items.length === 0) return null
+
+  return { items }
 }
 
 export class BrowserAgent {
@@ -353,6 +381,8 @@ export class BrowserAgent {
   private state: AgentState
   private callbacks: AgentCallbacks
   private stepCounter = 0
+  private plan: AgentPlan | null = null
+  private currentPlanItemIndex = 0
 
   constructor(config: AIConfig, callbacks: AgentCallbacks = {}) {
     this.config = config
@@ -361,6 +391,26 @@ export class BrowserAgent {
       isRunning: false,
       currentStep: '',
       steps: [],
+    }
+  }
+
+  private updatePlanItemStatus(index: number, status: PlanItem['status']) {
+    if (this.plan && this.plan.items[index]) {
+      this.plan.items[index].status = status
+      this.state.plan = { ...this.plan }
+      this.callbacks.onPlanUpdate?.(this.plan)
+    }
+  }
+
+  private advancePlanItem() {
+    if (this.plan && this.currentPlanItemIndex < this.plan.items.length) {
+      // Mark current as completed
+      this.updatePlanItemStatus(this.currentPlanItemIndex, 'completed')
+      this.currentPlanItemIndex++
+      // Mark next as in_progress if exists
+      if (this.currentPlanItemIndex < this.plan.items.length) {
+        this.updatePlanItemStatus(this.currentPlanItemIndex, 'in_progress')
+      }
     }
   }
 
@@ -388,10 +438,14 @@ export class BrowserAgent {
   }
 
   async run(messages: ModelMessage[], maxSteps = 20): Promise<string> {
+    this.plan = null
+    this.currentPlanItemIndex = 0
+
     this.updateState({
       isRunning: true,
       currentStep: 'Planning...',
       steps: [],
+      plan: undefined,
     })
 
     try {
@@ -419,8 +473,14 @@ export class BrowserAgent {
           result: planText,
         })
 
-        // Emit plan as text for display
+        // Parse and emit plan for checklist display
         if (planText) {
+          this.plan = parsePlanFromText(planText)
+          if (this.plan) {
+            this.state.plan = this.plan
+            this.callbacks.onPlan?.(this.plan)
+          }
+          // Also emit as text for display
           this.callbacks.onText?.(planText + '\n\n')
         }
       } catch (planError) {
@@ -435,6 +495,11 @@ export class BrowserAgent {
 
       // Small delay between planning and execution to help with rate limits
       await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Start first plan item as in_progress
+      if (this.plan && this.plan.items.length > 0) {
+        this.updatePlanItemStatus(0, 'in_progress')
+      }
 
       this.updateState({ currentStep: 'Executing...' })
 
@@ -521,6 +586,15 @@ export class BrowserAgent {
                   result: resultStr.slice(0, 500), // Truncate long results for display
                   error: errorMsg,
                 })
+
+                // Advance plan item on significant actions (navigation, major interactions)
+                if (status === 'completed' && this.plan) {
+                  const toolName = tc.toolName.toLowerCase()
+                  if (toolName === 'navigate' || toolName === 'createtab') {
+                    // Navigation is usually a plan step boundary
+                    this.advancePlanItem()
+                  }
+                }
               } else {
                 // No result found - mark as completed (tool executed but no return value)
                 this.updateStep(step.id, {
@@ -533,9 +607,20 @@ export class BrowserAgent {
         },
       }))
 
+      // Mark all remaining plan items as completed
+      if (this.plan) {
+        for (let i = 0; i < this.plan.items.length; i++) {
+          if (this.plan.items[i].status !== 'completed') {
+            this.plan.items[i].status = 'completed'
+          }
+        }
+        this.callbacks.onPlanUpdate?.(this.plan)
+      }
+
       this.updateState({
         isRunning: false,
         currentStep: 'Done',
+        plan: this.plan || undefined,
       })
 
       // Combine all text outputs

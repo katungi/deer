@@ -6,7 +6,7 @@ import { createProvider } from './provider'
 import { showAgentGlow, hideAgentGlow } from './glow'
 import { getAIConfig, hasAPIKey } from './storage'
 import { themeColors } from '@/components/ui/settings'
-import type { AgentState, AgentStep } from './types'
+import type { AgentState, AgentStep, AgentPlan } from './types'
 
 // Helper to detect rate limit errors from various sources
 function isRateLimitError(error: unknown): boolean {
@@ -29,6 +29,7 @@ export interface ChatMessage {
   timestamp: Date
   isStreaming?: boolean
   agentSteps?: AgentStep[]
+  plan?: AgentPlan
 }
 
 export interface UseChatOptions {
@@ -151,6 +152,24 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             )
           },
           onStateChange: setAgentState,
+          onPlan: (plan) => {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, plan }
+                  : m
+              )
+            )
+          },
+          onPlanUpdate: (plan) => {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === assistantMessageId
+                  ? { ...m, plan: { ...plan } }
+                  : m
+              )
+            )
+          },
         })
 
         agentRef.current = agent
