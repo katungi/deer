@@ -168,7 +168,7 @@ export function AgentSteps({ steps, isRunning, className, defaultCollapsed }: Ag
         </span>
 
         {hasActiveStep && (
-          <Loader2 className="h-3.5 w-3.5 text-amber-500 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 text-theme animate-spin" />
         )}
       </button>
 
@@ -196,7 +196,7 @@ export function AgentSteps({ steps, isRunning, className, defaultCollapsed }: Ag
                         </div>
                       )}
                       {step.status === 'running' && (
-                        <div className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center">
+                        <div className="w-4 h-4 rounded-full bg-theme flex items-center justify-center glow-theme-subtle">
                           <Loader2 className="h-2.5 w-2.5 text-white animate-spin" />
                         </div>
                       )}
@@ -217,7 +217,7 @@ export function AgentSteps({ steps, isRunning, className, defaultCollapsed }: Ag
                         <span className={cn(
                           "text-sm truncate",
                           step.status === 'completed' && "text-stone-600 dark:text-stone-300",
-                          step.status === 'running' && "text-amber-600 dark:text-amber-400 font-medium",
+                          step.status === 'running' && "text-theme font-medium",
                           step.status === 'failed' && "text-red-600 dark:text-red-400",
                           step.status === 'pending' && "text-stone-400 dark:text-stone-500"
                         )}>
@@ -253,9 +253,9 @@ export function AgentSteps({ steps, isRunning, className, defaultCollapsed }: Ag
             {isRunning && !hasActiveStep && (
               <div className="relative pl-6 py-1.5">
                 <div className="absolute left-0 top-1.5 flex items-center justify-center w-4 h-4">
-                  <Loader2 className="h-3.5 w-3.5 text-amber-500 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 text-theme animate-spin" />
                 </div>
-                <span className="text-sm text-stone-400 dark:text-stone-500">
+                <span className="text-sm text-theme">
                   Processing...
                 </span>
               </div>
@@ -284,9 +284,9 @@ export function AgentSteps({ steps, isRunning, className, defaultCollapsed }: Ag
 
 export function AgentThinking({ currentStep }: { currentStep?: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs">
-      <Loader2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 animate-spin" />
-      <span className="text-amber-700 dark:text-amber-300 font-medium">
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-light border border-theme glow-theme-subtle text-xs">
+      <Loader2 className="h-3.5 w-3.5 text-theme animate-spin" />
+      <span className="text-theme font-medium">
         {currentStep || "Thinking..."}
       </span>
     </div>

@@ -152,6 +152,17 @@
     background-color: var(--theme-color-dark);
   }
 
+  /* Theme glow effect for active/in-progress items */
+  .glow-theme {
+    box-shadow: 0 0 8px 2px var(--theme-color), 0 0 16px 4px color-mix(in srgb, var(--theme-color) 40%, transparent);
+  }
+  .glow-theme-subtle {
+    box-shadow: 0 0 4px 1px color-mix(in srgb, var(--theme-color) 60%, transparent);
+  }
+  .ring-theme {
+    --tw-ring-color: var(--theme-color);
+  }
+
   /* Markdown prose styles for AI messages */
   .prose-ai {
     @apply text-sm leading-relaxed;

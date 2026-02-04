@@ -35,10 +35,12 @@ export function AgentPlanDisplay({ plan, className, defaultCollapsed }: AgentPla
 
   return (
     <div className={cn(
-      "rounded-xl overflow-hidden border",
+      "rounded-xl overflow-hidden border transition-all duration-300",
       allComplete
         ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
-        : "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700",
+        : hasActiveItem
+          ? "bg-stone-50 dark:bg-stone-800/50 border-theme glow-theme-subtle"
+          : "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700",
       className
     )}>
       {/* Header */}
@@ -102,8 +104,8 @@ export function AgentPlanDisplay({ plan, className, defaultCollapsed }: AgentPla
                   </div>
                 )}
                 {item.status === 'in_progress' && (
-                  <div className="w-4 h-4 rounded-full border-2 border-amber-500 flex items-center justify-center">
-                    <Loader2 className="h-2.5 w-2.5 text-amber-500 animate-spin" />
+                  <div className="w-4 h-4 rounded-full border-2 border-theme flex items-center justify-center glow-theme-subtle">
+                    <Loader2 className="h-2.5 w-2.5 text-theme animate-spin" />
                   </div>
                 )}
                 {item.status === 'pending' && (
@@ -115,7 +117,7 @@ export function AgentPlanDisplay({ plan, className, defaultCollapsed }: AgentPla
               <span className={cn(
                 "text-sm flex-1",
                 item.status === 'completed' && "text-stone-500 dark:text-stone-400 line-through",
-                item.status === 'in_progress' && "text-amber-700 dark:text-amber-300 font-medium",
+                item.status === 'in_progress' && "text-theme font-medium",
                 item.status === 'pending' && "text-stone-600 dark:text-stone-300"
               )}>
                 {item.text}
