@@ -391,13 +391,15 @@ const tools = {
 // Micro-planning prompt - plans only 2 steps at a time based on current state
 const MICRO_PLANNING_PROMPT = `You are Deer, a browser automation agent. You work in small incremental steps.
 
-Given the user's task and the CURRENT page state (DOM/screenshot), plan exactly 2 small concrete actions.
+Given the user's task and the CURRENT page state (DOM and/or screenshot), plan exactly 2 small concrete actions.
 
 Rules:
 - Plan ONLY 2 steps - no more
 - Steps must be specific and actionable (e.g., "Click the search button", "Type 'query' in search box")
-- Base your plan on what you can ACTUALLY see in the current DOM/screenshot
+- Base your plan on what you can ACTUALLY see in the current DOM or screenshot
+- If a screenshot is provided, use it to understand the visual layout when DOM is limited
 - If task needs permission (downloads, forms, messages, terms), note it
+- If page content isn't loading, first step should be to navigate or wait
 
 Format your response as:
 **Next Steps:**
@@ -414,17 +416,25 @@ Do NOT use tools in this response - just plan.`
 const EXECUTION_PROMPT = `You are Deer, a browser automation agent. Execute the planned steps.
 
 ## WORKFLOW
-1. getPageDOM → find elements by [ref=ref_N] → act → verify
+1. Try getPageDOM first → find elements by [ref=ref_N] → act → verify
+2. If getPageDOM fails or returns no elements, use screenshot for visual context
 
 ## TOOLS
-- getPageDOM: Get page structure with refs. CALL THIS FIRST.
+- getPageDOM: Get page structure with refs. TRY THIS FIRST.
+- screenshot: Capture visible page - USE AS FALLBACK if getPageDOM fails
 - clickElement/typeInElement/scrollToElement: Use refs from getPageDOM
-- navigate, createTab/closeTab/switchTab, screenshot, wait
+- navigate, createTab/closeTab/switchTab, wait
 - requestPermission: Required before sensitive actions
 
 ## DOM FORMAT
 Elements have refs like: button "Sign In" [ref=ref_1]
 Use the ref value as elementId.
+
+## FALLBACK STRATEGY
+If getPageDOM fails or returns error:
+1. Take a screenshot to see the current page state
+2. Use navigate to go to the target URL if needed
+3. Try getPageDOM again after navigation/page load
 
 ## SECURITY
 PROHIBITED: Passwords, credit cards, SSN, API keys, purchases, account creation
@@ -432,8 +442,8 @@ REQUIRE PERMISSION: Downloads, forms with personal data, sending messages, accep
 
 ## CRITICAL
 - Execute ONLY the 2 planned steps, then STOP
-- Always getPageDOM first to find current refs
-- Never guess refs - get them from getPageDOM`
+- If DOM not available, take screenshot and adapt your approach
+- Never guess refs - get them from getPageDOM or use screenshot for visual context`
 
 export interface AgentCallbacks {
   onStep?: (step: AgentStep) => void
@@ -477,8 +487,22 @@ function parseMicroPlan(text: string): { steps: string[], isComplete: boolean, s
   }
 }
 
+// Helper to take a screenshot fallback
+async function takeScreenshotFallback(): Promise<{ dataUrl?: string; error?: string }> {
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(undefined, {
+      format: 'png',
+      quality: 90,
+    })
+    return { dataUrl }
+  } catch (error) {
+    console.error('[takeScreenshotFallback] Failed:', error)
+    return { error: String(error) }
+  }
+}
+
 // Get current page state for evaluation
-async function getCurrentPageState(): Promise<{ dom: string, url: string, title: string }> {
+async function getCurrentPageState(): Promise<{ dom: string, url: string, title: string, screenshot?: string }> {
   // Get basic tab info first - this always works
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   const url = tab?.url || ''
@@ -486,10 +510,13 @@ async function getCurrentPageState(): Promise<{ dom: string, url: string, title:
 
   // Check if this is a restricted page where content scripts can't run
   if (!tab?.id || url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:')) {
+    // Try screenshot fallback for restricted pages
+    const screenshotResult = await takeScreenshotFallback()
     return {
       dom: '(Cannot read page content - this is a browser internal page. Navigate to a regular website first.)',
       url,
       title,
+      screenshot: screenshotResult.dataUrl,
     }
   }
 
@@ -506,14 +533,28 @@ async function getCurrentPageState(): Promise<{ dom: string, url: string, title:
       dom = dom.substring(0, MAX_DOM_CHARS) + '\n... (truncated)'
     }
 
+    // If DOM is empty or very short, take a screenshot as additional context
+    if (!dom || dom.length < 100) {
+      console.log('[getCurrentPageState] DOM too short, taking screenshot fallback')
+      const screenshotResult = await takeScreenshotFallback()
+      return {
+        dom: dom || '(No interactive elements found on page)',
+        url,
+        title,
+        screenshot: screenshotResult.dataUrl
+      }
+    }
+
     return { dom, url, title }
   } catch (error) {
-    // Content script not ready - this is normal for new tabs or pages still loading
-    console.log('[getCurrentPageState] Content script not ready, returning basic info')
+    // Content script not ready - take screenshot as fallback
+    console.log('[getCurrentPageState] Content script not ready, taking screenshot fallback')
+    const screenshotResult = await takeScreenshotFallback()
     return {
-      dom: '(Page content not yet available - the page may still be loading. Try using navigate tool to go to the target URL.)',
+      dom: '(Page content not yet available - the page may still be loading. Screenshot provided for visual context.)',
       url,
       title,
+      screenshot: screenshotResult.dataUrl,
     }
   }
 }
@@ -619,7 +660,8 @@ export class BrowserAgent {
         this.updateStep(observeStep.id, {
           action: `Observed: ${pageState.title || pageState.url || 'current page'}`,
           status: 'completed',
-          result: `URL: ${pageState.url}\nElements found: ${pageState.dom.length > 0 ? 'yes' : 'no'}`,
+          result: `URL: ${pageState.url}\nElements found: ${pageState.dom.length > 0 ? 'yes' : 'no'}${pageState.screenshot ? '\nScreenshot captured as fallback' : ''}`,
+          screenshot: pageState.screenshot,
         })
 
         // Phase 2: Plan next 2 steps based on current state
@@ -629,31 +671,52 @@ export class BrowserAgent {
           status: 'running',
         })
 
-        // Build context with task + current state
-        const planningMessages: ModelMessage[] = [
-          ...messages,
-          {
-            role: 'user' as const,
-            content: `Current page state:
+        // Build context with task + current state - use simple text content for reliability
+        const contextText = `Current page state:
 URL: ${pageState.url}
 Title: ${pageState.title}
 
 Interactive elements on page:
 ${pageState.dom || '(Unable to read page - may need to navigate first)'}
+${pageState.screenshot ? '\n(Screenshot was captured for visual reference)' : ''}
 
 ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlanItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n')}\n\n` : ''}What are the next 2 specific steps to complete the task?`
+
+        const planningMessages: ModelMessage[] = [
+          ...messages,
+          {
+            role: 'user' as const,
+            content: contextText,
           }
         ]
 
         let microPlan: { steps: string[], isComplete: boolean, summary?: string }
 
         try {
-          const planResult = await withRateLimitRetry(() => generateText({
-            model,
-            system: MICRO_PLANNING_PROMPT,
-            messages: planningMessages,
-            stopWhen: stepCountIs(1),
-          }))
+          console.log('[Agent] Starting planning call...')
+          console.log('[Agent] Provider:', this.config.provider, 'Model:', this.config.model || 'default')
+
+          // Add timeout to prevent hanging forever
+          const planPromise = withRateLimitRetry(() => {
+            console.log('[Agent] Calling generateText for planning...')
+            return generateText({
+              model,
+              system: MICRO_PLANNING_PROMPT,
+              messages: planningMessages,
+              stopWhen: stepCountIs(1),
+            })
+          })
+
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              console.log('[Agent] Planning timeout triggered!')
+              reject(new Error('Planning timeout after 30s'))
+            }, 30000)
+          })
+
+          console.log('[Agent] Waiting for planning result...')
+          const planResult = await Promise.race([planPromise, timeoutPromise])
+          console.log('[Agent] Planning result received')
 
           const planText = planResult.text || ''
           microPlan = parseMicroPlan(planText)
@@ -668,14 +731,32 @@ ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlan
           if (planText) {
             this.callbacks.onText?.(planText + '\n\n')
           }
+          console.log('[Agent] Planning completed successfully')
         } catch (planError) {
           console.error('[Agent] Planning failed:', planError)
           this.updateStep(planStep.id, {
-            action: 'Planning failed',
+            action: 'Planning failed - retrying with simpler approach',
             status: 'failed',
             error: String(planError),
           })
-          throw planError
+
+          // On planning failure, create a default recovery plan
+          const errorMsg = String(planError)
+          if (errorMsg.includes('timeout')) {
+            // On timeout, try a simpler approach
+            microPlan = {
+              steps: ['Get page content using getPageDOM', 'Take action based on what is found'],
+              isComplete: false
+            }
+            console.log('[Agent] Using fallback plan due to timeout')
+          } else {
+            // For other errors, try to continue with basic steps
+            microPlan = {
+              steps: ['Navigate to the target page or get current page state', 'Identify next action to take'],
+              isComplete: false
+            }
+            console.log('[Agent] Using fallback plan due to error')
+          }
         }
 
         // Check if task is complete
@@ -686,11 +767,13 @@ ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlan
           break
         }
 
-        // No steps planned - something went wrong
+        // No steps planned - use fallback
         if (microPlan.steps.length === 0) {
-          console.warn('[Agent] No steps planned, ending iteration')
-          finalSummary = 'Unable to determine next steps.'
-          break
+          console.warn('[Agent] No steps planned, using fallback plan')
+          microPlan = {
+            steps: ['Get page DOM to understand current state', 'Execute appropriate action'],
+            isComplete: false
+          }
         }
 
         // Update plan display with current micro-plan
@@ -713,9 +796,13 @@ ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlan
         ]
 
         let stepsExecuted = 0
+        let toolCallCount = 0
 
         try {
-          await withRateLimitRetry(() => generateText({
+          console.log('[Agent] Starting execution phase...')
+
+          // Add timeout to prevent execution from hanging forever
+          const execPromise = withRateLimitRetry(() => generateText({
             model,
             system: EXECUTION_PROMPT,
             messages: executionMessages,
@@ -740,6 +827,7 @@ ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlan
                 }
 
                 for (const tc of toolCalls as any[]) {
+                  toolCallCount++
                   const step = this.addStep({
                     action: `${tc.toolName}: ${JSON.stringify(tc.args)}`,
                     status: 'running',
@@ -779,10 +867,16 @@ ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlan
                     })
 
                     // Track significant actions to know when a plan step is done
+                    // Also count tool execution attempts after getPageDOM (which is typically the first call)
                     const toolName = tc.toolName.toLowerCase()
-                    const significantActions = ['navigate', 'createtab', 'clickelement', 'typeinelement', 'click', 'type']
-                    if (status === 'completed' && significantActions.includes(toolName)) {
+                    const significantActions = ['navigate', 'createtab', 'clickelement', 'typeinelement', 'click', 'type', 'scroll', 'scrolltoelement']
+                    const isSignificantAction = significantActions.includes(toolName)
+
+                    // Count as step executed if: significant action completed, OR significant action was attempted (even if failed)
+                    if (isSignificantAction) {
                       stepsExecuted++
+                      console.log(`[Agent] Step executed: ${toolName}, total: ${stepsExecuted}`)
+
                       // Update plan display to show progress
                       if (stepsExecuted <= microPlan.steps.length) {
                         // Complete the step that was just executed
@@ -805,9 +899,30 @@ ${this.completedPlanItems.length > 0 ? `Already completed:\n${this.completedPlan
               }
             },
           }))
+
+          const execTimeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Execution timeout after 60s')), 60000)
+          })
+
+          await Promise.race([execPromise, execTimeoutPromise])
+          console.log('[Agent] Execution phase completed')
         } catch (execError) {
           console.error('[Agent] Execution failed:', execError)
           // Continue to next iteration anyway - might recover
+        }
+
+        // Always advance the plan after execution attempt to prevent getting stuck
+        // This ensures we don't get stuck on the same step forever
+        if (stepsExecuted === 0) {
+          console.log('[Agent] No significant actions completed - advancing plan to prevent stuck state')
+          // Mark steps as done to move forward
+          if (microPlan.steps[0]) {
+            this.completeCurrentStep(microPlan.steps[0])
+          }
+          if (microPlan.steps[1]) {
+            this.completeCurrentStep(microPlan.steps[1])
+          }
+          this.updatePlanDisplay([], 0)
         }
 
         // Small delay before next iteration

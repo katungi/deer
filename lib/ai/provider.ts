@@ -5,7 +5,7 @@ import { generateText, streamText, stepCountIs, tool, type ModelMessage, type La
 import type { AIConfig, AIProvider } from './types'
 
 const DEFAULT_MODELS: Record<AIProvider, string> = {
-  nvidia: 'moonshotai/kimi-k2.5',
+  nvidia: 'moonshotai/kimi-k2.5', // Supports OpenAI-compatible tool calling
   anthropic: 'claude-sonnet-4-20250514',
   openai: 'gpt-4o',
   groq: 'llama-3.3-70b-versatile',
@@ -13,7 +13,7 @@ const DEFAULT_MODELS: Record<AIProvider, string> = {
 
 // Vision-capable models for image analysis (faster decisions with screenshots)
 const DEFAULT_VISION_MODELS: Record<AIProvider, string> = {
-  nvidia: 'moonshotai/kimi-k2.5-vision',
+  nvidia: 'moonshotai/kimi-k2.5', // Kimi K2.5 supports multimodal (vision)
   anthropic: 'claude-sonnet-4-20250514',
   openai: 'gpt-4o',
   groq: 'llama-3.2-90b-vision-preview',
@@ -27,6 +27,45 @@ export function createProvider(config: AIConfig): LanguageModel {
       const nvidia = createOpenAI({
         apiKey: config.apiKey,
         baseURL: 'https://integrate.api.nvidia.com/v1',
+        // Add fetch options for timeout and logging
+        fetch: async (url: RequestInfo | URL, options?: RequestInit) => {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => {
+            console.log('[NVIDIA API] Request timeout after 60s, aborting...')
+            controller.abort()
+          }, 60000) // 60s timeout
+
+          const startTime = Date.now()
+          console.log('[NVIDIA API] Starting request to:', typeof url === 'string' ? url : url.toString())
+
+          try {
+            const response = await fetch(url, {
+              ...options,
+              signal: controller.signal,
+            })
+            clearTimeout(timeoutId)
+            const elapsed = Date.now() - startTime
+            console.log(`[NVIDIA API] Response received in ${elapsed}ms, status: ${response.status}`)
+
+            if (!response.ok) {
+              // Clone response before reading to not consume the body
+              const cloned = response.clone()
+              const errorText = await cloned.text()
+              console.error('[NVIDIA API] Error response:', errorText)
+            }
+
+            return response
+          } catch (error) {
+            clearTimeout(timeoutId)
+            const elapsed = Date.now() - startTime
+            console.error(`[NVIDIA API] Request failed after ${elapsed}ms:`, error)
+
+            if (error instanceof Error && error.name === 'AbortError') {
+              throw new Error('NVIDIA API request timed out after 60s')
+            }
+            throw error
+          }
+        },
       })
       return nvidia.chat(model)
     }
@@ -61,6 +100,45 @@ export function createVisionProvider(config: AIConfig): LanguageModel {
       const nvidia = createOpenAI({
         apiKey: config.apiKey,
         baseURL: 'https://integrate.api.nvidia.com/v1',
+        // Add fetch options for timeout and logging
+        fetch: async (url: RequestInfo | URL, options?: RequestInit) => {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => {
+            console.log('[NVIDIA Vision API] Request timeout after 60s, aborting...')
+            controller.abort()
+          }, 60000) // 60s timeout
+
+          const startTime = Date.now()
+          console.log('[NVIDIA Vision API] Starting request to:', typeof url === 'string' ? url : url.toString())
+
+          try {
+            const response = await fetch(url, {
+              ...options,
+              signal: controller.signal,
+            })
+            clearTimeout(timeoutId)
+            const elapsed = Date.now() - startTime
+            console.log(`[NVIDIA Vision API] Response received in ${elapsed}ms, status: ${response.status}`)
+
+            if (!response.ok) {
+              // Clone response before reading to not consume the body
+              const cloned = response.clone()
+              const errorText = await cloned.text()
+              console.error('[NVIDIA Vision API] Error response:', errorText)
+            }
+
+            return response
+          } catch (error) {
+            clearTimeout(timeoutId)
+            const elapsed = Date.now() - startTime
+            console.error(`[NVIDIA Vision API] Request failed after ${elapsed}ms:`, error)
+
+            if (error instanceof Error && error.name === 'AbortError') {
+              throw new Error('NVIDIA API request timed out after 60s')
+            }
+            throw error
+          }
+        },
       })
       // Use .chat() to force chat/completions API instead of /responses
       return nvidia.chat(model)
@@ -139,7 +217,7 @@ export function getAvailableModels(provider: AIProvider): string[] {
     case 'nvidia':
       return [
         'moonshotai/kimi-k2.5',
-        'moonshotai/kimi-k2.5-vision',
+        'moonshotai/kimi-k2-instruct',
         'nvidia/llama-3.1-nemotron-70b-instruct',
         'meta/llama-3.3-70b-instruct',
       ]
